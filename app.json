@@ -1,24 +1,52 @@
 {
   "expo": {
-    "name": "meeting-minutes-app",
-    "slug": "meeting-minutes-app",
+    "name": "OTOROKU",
+    "slug": "otoroku",
     "version": "1.0.0",
     "orientation": "portrait",
+    "scheme": "otoroku",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#7C3AED"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-av",
+        {
+          "microphonePermission": "録音のために $(PRODUCT_NAME) がマイクにアクセスすることを許可してください。"
+        }
+      ],
+      "expo-secure-store",
+      "expo-document-picker"
+    ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.otoroku.app",
+      "infoPlist": {
+        "UIBackgroundModes": ["audio"]
+      },
+      "config": {
+        "usesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "backgroundColor": "#7C3AED"
       },
-      "predictiveBackGestureEnabled": false
+      "package": "com.otoroku.app",
+      "permissions": [
+        "RECORD_AUDIO",
+        "READ_EXTERNAL_STORAGE"
+      ]
     },
     "web": {
+      "bundler": "metro",
       "favicon": "./assets/favicon.png"
     }
   }
