@@ -1,0 +1,7 @@
+{
+  "/_global-error/page": "/_global-error",
+  "/_not-found/page": "/_not-found",
+  "/api/otoroku-status/route": "/api/otoroku-status",
+  "/api/otoroku-transcribe/route": "/api/otoroku-transcribe",
+  "/api/otoroku-upload-url/route": "/api/otoroku-upload-url"
+}
