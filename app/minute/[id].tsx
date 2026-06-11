@@ -17,6 +17,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import { Paths, File } from "expo-file-system";
 import * as Sharing from "expo-sharing";
+import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 import { getMinute, createMinute, updateMinute, deleteMinute } from "../../src/services/minutes";
 import { getAllTemplates } from "../../src/services/templates";
 import { getAllTags, createTag } from "../../src/services/tags";
@@ -61,7 +62,17 @@ export default function MinuteDetailScreen() {
   const contentInputRef = useRef<TextInput>(null);
   const [selection, setSelection] = useState<{ start: number; end: number }>({ start: 0, end: 0 });
   const templateContentRef = useRef<string | null>(null);
+  const seekBarWidth = useRef(0);
+  const player = useAudioPlayer(recordingPathState ?? null, { updateInterval: 250 });
+  const playerStatus = useAudioPlayerStatus(player);
   const toast = useToast();
+
+  const fmt = (s: number) => {
+    if (!isFinite(s)) return "--:--";
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+  };
   const initialSnapshot = useRef<{
     title: string;
     content: string;
@@ -175,7 +186,7 @@ export default function MinuteDetailScreen() {
         folder_id: selectedFolderId ?? undefined,
         original_transcript: originalTranscript || undefined,
         corrected_transcript: correctedTranscript || undefined,
-      } as any);
+      });
       if (initialSnapshot.current) {
         initialSnapshot.current = {
           title: title || initialSnapshot.current.title,
@@ -204,7 +215,7 @@ export default function MinuteDetailScreen() {
     setTranscribing(true);
     try {
       const { pipelineManager } = await import("../../src/services/pipeline-manager");
-      pipelineManager.startPipeline(uri, templateContentRef.current ?? undefined);
+      await pipelineManager.startPipeline(uri, templateContentRef.current ?? undefined);
 
       setContent((prev) =>
         prev
@@ -213,10 +224,9 @@ export default function MinuteDetailScreen() {
       );
     } catch (e: any) {
       Alert.alert("文字起こしエラー", e?.message ?? "音声の文字起こしに失敗しました。");
-    } finally {
       setTranscribing(false);
     }
-  }, [recordingUri, recordingPath]);
+  }, [recordingUri, recordingPath, recordingPathState]);
 
   const handleSave = useCallback(async (skipEmptyCheck?: boolean) => {
     const hasContent = content.trim() || correctedTranscript.trim() || originalTranscript.trim();
@@ -276,7 +286,7 @@ export default function MinuteDetailScreen() {
         original_transcript: originalTranscript || undefined,
         corrected_transcript: correctedTranscript || undefined,
         recording_path: recordingPathState ?? undefined,
-      } as any);
+      });
       error = result.error;
     }
 
@@ -572,34 +582,79 @@ export default function MinuteDetailScreen() {
         </View>
 
         {recordingPathState && (
-          <View style={styles.transcribeSection}>
-            <View style={{ flexDirection: "row", gap: 8 }}>
-              <TouchableOpacity
-                style={[styles.transcribeBtn, { backgroundColor: c.surfaceSecondary }]}
-                onPress={async () => {
-                  const { AudioModule } = await import("expo-audio");
-                  const player = AudioModule.createAudioPlayer({ uri: recordingPathState });
-                  player.play();
-                }}
-              >
-                <Ionicons name="play-outline" size={18} color={c.textPrimary} />
-                <Text style={[styles.transcribeBtnText, { color: c.textPrimary }]}>再生</Text>
-              </TouchableOpacity>
-              {transcribing ? (
-                <View style={styles.transcribingRow}>
-                  <ActivityIndicator size="small" color={c.primary} />
-                  <Text style={[styles.transcribingText, { color: c.textMuted }]}>文字起こし中…</Text>
-                </View>
-              ) : (
+          <View style={[styles.playerCard, { backgroundColor: c.surface, borderColor: c.cardBorder }]}>
+            {/* コントロール行 */}
+            <View style={styles.playerControls}>
+              <View style={styles.playerButtons}>
                 <TouchableOpacity
-                  style={[styles.transcribeBtn, { backgroundColor: c.primaryBg }]}
-                  onPress={handleTranscribe}
+                  style={[styles.playerBtn, { backgroundColor: c.primary }]}
+                  onPress={() => {
+                    if (player.playing) player.pause();
+                    else player.play();
+                  }}
                 >
-                  <Ionicons name="mic-outline" size={18} color={c.primary} />
-                  <Text style={[styles.transcribeBtnText, { color: c.primary }]}>文字起こし</Text>
+                  <Ionicons
+                    name={player.playing ? "pause" : "play"}
+                    size={20}
+                    color="#fff"
+                  />
                 </TouchableOpacity>
-              )}
+                <TouchableOpacity
+                  style={[styles.playerBtnSmall, { backgroundColor: c.surfaceSecondary }]}
+                  onPress={() => {
+                    player.seekTo(0);
+                    player.pause();
+                  }}
+                >
+                  <Ionicons name="stop" size={16} color={c.textSecondary} />
+                </TouchableOpacity>
+              </View>
+              <Text style={[styles.playerTime, { color: c.textMuted }]}>
+                {fmt(playerStatus.currentTime)} / {fmt(playerStatus.duration)}
+              </Text>
             </View>
+
+            {/* シークバー */}
+            <View
+              style={[styles.seekTrack, { backgroundColor: c.border }]}
+              onStartShouldSetResponder={() => true}
+              onResponderRelease={(e) => {
+                if (!playerStatus.duration || !seekBarWidth.current) return;
+                const ratio = Math.max(0, Math.min(1, e.nativeEvent.locationX / seekBarWidth.current));
+                player.seekTo(ratio * playerStatus.duration);
+              }}
+              onLayout={(e) => {
+                seekBarWidth.current = e.nativeEvent.layout.width;
+              }}
+            >
+              <View
+                style={[
+                  styles.seekFill,
+                  {
+                    backgroundColor: c.primary,
+                    width: playerStatus.duration > 0
+                      ? `${(playerStatus.currentTime / playerStatus.duration) * 100}%`
+                      : "0%",
+                  },
+                ]}
+              />
+            </View>
+
+            {/* 文字起こし */}
+            {transcribing ? (
+              <View style={styles.transcribingRow}>
+                <ActivityIndicator size="small" color={c.primary} />
+                <Text style={[styles.transcribingText, { color: c.textMuted }]}>文字起こし中…</Text>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={[styles.transcribeBtn, { backgroundColor: c.primaryBg }]}
+                onPress={handleTranscribe}
+              >
+                <Ionicons name="mic-outline" size={16} color={c.primary} />
+                <Text style={[styles.transcribeBtnText, { color: c.primary }]}>文字起こし</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
@@ -921,24 +976,68 @@ const styles = StyleSheet.create({
   },
   tagChipText: { fontSize: 12 },
 
-  transcribeSection: { marginBottom: 12 },
+  playerCard: {
+    marginBottom: 12,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 10,
+  },
+  playerControls: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  playerButtons: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  playerBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  playerBtnSmall: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  playerTime: {
+    fontSize: 13,
+    fontWeight: "500",
+    fontVariant: ["tabular-nums"],
+  },
+  seekTrack: {
+    height: 6,
+    borderRadius: 3,
+    overflow: "hidden",
+  },
+  seekFill: {
+    height: "100%",
+    borderRadius: 3,
+  },
   transcribingRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    paddingVertical: 12,
+    paddingVertical: 4,
   },
   transcribingText: { fontSize: 14, fontStyle: "italic" },
   transcribeBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 8,
     alignSelf: "flex-start",
   },
-  transcribeBtnText: { fontSize: 14, fontWeight: "600" },
+  transcribeBtnText: { fontSize: 13, fontWeight: "600" },
 
   contentInput: {
     flex: 1,
