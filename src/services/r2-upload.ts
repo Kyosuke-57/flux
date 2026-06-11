@@ -1,8 +1,12 @@
 /**
- * Expo → R2 アップロードサービス（サーバープロキシ方式）
+ * Expo → R2 アップロードサービス（署名付きURL方式）
  *
- * multipart/form-data でバイナリ直接送信。Base64エンコードを避けることで
- * 大ファイルのアップロードを高速化し、Cloudflare Tunnel のタイムアウト(524)を防止。
+ * 1. API サーバーに署名付きアップロードURLを要求（POST /api/otoroku-upload-url）
+ * 2. 発行されたURLを使ってR2に直接アップロード（PUT）
+ * 3. アップロード完了 → r2Key を返す
+ *
+ * Vercel / Cloudflare Tunnel どちらでも動作。
+ * 大容量ファイルもストリーミング不要で安全。
  */
 import { supabase } from "../lib/supabase";
 
@@ -14,7 +18,10 @@ export interface UploadResult {
 }
 
 /**
- * 音声ファイルを API サーバー経由で R2 にアップロード
+ * R2 に音声ファイルをアップロード（署名付きURL方式）
+ *
+ * 1. API から署名付きアップロードURLを取得
+ * 2. そのURLにファイルを直接 PUT
  *
  * @param onProgress 0-100 の進捗率を受け取るコールバック
  */
@@ -35,24 +42,31 @@ export async function uploadToR2(
     throw new Error("認証されていません。ログインしてください。");
   }
 
-  // multipart/form-data でファイルを送信（Base64エンコード不要）
-  const formData = new FormData();
+  // 1. 署名付きアップロードURLを要求
+  const urlRes = await fetch(`${API_BASE_URL}/api/otoroku-upload-url`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      filename: params.filename,
+      mimeType: params.mimeType,
+      fileSize: params.fileSize,
+    }),
+  });
 
-  if (params.uri.startsWith("blob:") || params.uri.startsWith("data:")) {
-    const response = await fetch(params.uri);
-    const blob = await response.blob();
-    const file = new File([blob], params.filename, { type: params.mimeType });
-    formData.append("audio", file);
-  } else {
-    formData.append("audio", {
-      uri: params.uri,
-      type: params.mimeType,
-      name: params.filename,
-    } as any);
+  if (!urlRes.ok) {
+    const err = await urlRes.text().catch(() => "");
+    throw new Error(`アップロードURLの取得に失敗しました: ${urlRes.status} ${err}`);
   }
 
-  formData.append("filename", params.filename);
+  const { uploadUrl, r2Key } = await urlRes.json();
+  if (!uploadUrl || !r2Key) {
+    throw new Error("アップロードURLのレスポンスが不正です");
+  }
 
+  // 2. 署名付きURLにファイルを直接PUT
   const result = await new Promise<UploadResult>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
 
@@ -65,17 +79,8 @@ export async function uploadToR2(
 
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) {
-        try {
-          const data = JSON.parse(xhr.responseText);
-          if (!data.r2Key) {
-            reject(new Error("R2 アップロードのレスポンスが不正です"));
-            return;
-          }
-          onProgress?.(100);
-          resolve({ r2Key: data.r2Key });
-        } catch {
-          reject(new Error("レスポンスの解析に失敗しました"));
-        }
+        onProgress?.(100);
+        resolve({ r2Key });
       } else {
         const body = xhr.responseText || "(レスポンス読み取り不可)";
         reject(new Error(`R2 アップロードに失敗しました: ${xhr.status} — ${body}`));
@@ -85,10 +90,9 @@ export async function uploadToR2(
     xhr.onerror = () => reject(new Error("ネットワークエラーが発生しました"));
     xhr.ontimeout = () => reject(new Error("アップロードがタイムアウトしました"));
 
-    xhr.open("POST", `${API_BASE_URL}/api/otoroku-upload-stream`);
-    xhr.setRequestHeader("Authorization", `Bearer ${token}`);
-    // Content-Type は自動設定（multipart/form-data; boundary=...）
-    xhr.send(formData as any);
+    xhr.open("PUT", uploadUrl);
+    xhr.setRequestHeader("Content-Type", params.mimeType);
+    xhr.send({ uri: params.uri, type: params.mimeType, name: params.filename } as any);
   });
 
   return result;
