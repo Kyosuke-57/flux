@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   Alert,
   ActivityIndicator,
   Modal,
+  Animated,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
@@ -67,6 +68,44 @@ export default function SettingsScreen() {
   const [manageTarget, setManageTarget] = useState<"folder" | "tag" | null>(null);
   const [editItem, setEditItem] = useState<{ id: string; name: string } | null>(null);
   const [createName, setCreateName] = useState("");
+
+  // Modal animation（単一の Animated.Value で opacity と scale を同時制御）
+  const [modalVisible, setModalVisible] = useState(false);
+  const animProgress = useRef(new Animated.Value(0)).current;
+
+  const backdropOpacity = animProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 1],
+  });
+  const contentScale = animProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.92, 1],
+  });
+
+  // Open
+  useEffect(() => {
+    if (manageTarget !== null) {
+      animProgress.setValue(0);
+      setModalVisible(true);
+      Animated.timing(animProgress, {
+        toValue: 1,
+        duration: 180,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [manageTarget, animProgress]);
+
+  const handleModalClose = () => {
+    Animated.timing(animProgress, {
+      toValue: 0,
+      duration: 120,
+      useNativeDriver: true,
+    }).start(() => {
+      animProgress.setValue(0);
+      setModalVisible(false);
+      setManageTarget(null);
+    });
+  };
 
   // Load subscription data
   useEffect(() => {
@@ -369,137 +408,160 @@ export default function SettingsScreen() {
 
       {/* ─── フォルダ/タグ管理モーダル ─── */}
       <Modal
-        visible={manageTarget !== null}
+        visible={modalVisible}
         transparent
-        animationType="slide"
-        onRequestClose={() => setManageTarget(null)}
+        animationType="none"
+        onRequestClose={handleModalClose}
       >
-        <TouchableOpacity style={[styles.modalOverlay, { backgroundColor: c.overlay }]} activeOpacity={1} onPress={() => setManageTarget(null)}>
-          <TouchableOpacity activeOpacity={1} onPress={() => {}} style={[styles.modalContent, { backgroundColor: c.surface }]}>
-            <View style={[styles.modalHeader, { borderBottomColor: c.divider }]}>
-              <Text style={[styles.modalTitle, { color: c.textPrimary }]}>
-                {manageTarget === "folder" ? "フォルダ" : "タグ"}
-              </Text>
-              <TouchableOpacity onPress={() => setManageTarget(null)}>
-                <Text style={[styles.modalClose, { color: c.primary }]}>閉じる</Text>
-              </TouchableOpacity>
-            </View>
-            <View style={[styles.manageRow, { borderBottomColor: c.divider, backgroundColor: c.surface }]}>
-              <TextInput
-                style={[styles.manageInput, { backgroundColor: c.background, borderColor: c.border, color: c.textPrimary }]}
-                value={createName}
-                onChangeText={setCreateName}
-                placeholder={manageTarget === "folder" ? "新しいフォルダ名" : "新しいタグ名"}
-                placeholderTextColor={c.textMuted}
-              />
-              <TouchableOpacity
-                style={[styles.manageSaveBtn, { backgroundColor: c.primaryBg }]}
-                onPress={async () => {
-                  if (!createName.trim()) return;
-                  if (manageTarget === "folder") {
-                    const { data } = await createFolder(createName.trim());
-                    if (data) setFolders((prev) => [...prev, data]);
-                  } else {
-                    const { data } = await createTag(createName.trim());
-                    if (data) setTags((prev) => [...prev, data]);
-                  }
-                  setCreateName("");
-                }}
-              >
-                <Text style={{ fontSize: 13, fontWeight: "600", color: c.primary }}>作成</Text>
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={{ maxHeight: 400 }}>
-              {(manageTarget === "folder" ? folders : tags).map((item) => (
-                <View key={item.id} style={[styles.manageRow, { borderBottomColor: c.divider, backgroundColor: c.surface }]}>
-                  {editItem?.id === item.id ? (
-                    <TextInput
-                      style={[styles.manageInput, { backgroundColor: c.background, borderColor: c.border, color: c.textPrimary }]}
-                      value={editItem.name}
-                      onChangeText={(t) => setEditItem({ ...editItem, name: t })}
-                      autoFocus
-                      placeholder="名前"
-                      placeholderTextColor={c.textMuted}
-                    />
-                  ) : (
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}>
-                      {"color" in item && item.color && (
-                        <View style={[styles.colorDot, { backgroundColor: item.color }]} />
-                      )}
-                      <Text style={[styles.manageName, { color: c.textPrimary }]}>
-                        {"name" in item ? (item as any).name : ""}
-                      </Text>
-                    </View>
-                  )}
-                  <View style={{ flexDirection: "row", gap: 6 }}>
-                    {editItem?.id === item.id ? (
-                      <>
-                        <TouchableOpacity
-                          style={[styles.manageSaveBtn, { backgroundColor: c.primaryBg }]}
-                          onPress={async () => {
-                            if (manageTarget === "folder") {
-                              await updateFolder(item.id, { name: editItem.name });
-                              setFolders((prev) => prev.map((f) => f.id === item.id ? { ...f, name: editItem.name } : f));
-                            } else {
-                              await updateTag(item.id, { name: editItem.name });
-                              setTags((prev) => prev.map((t) => t.id === item.id ? { ...t, name: editItem.name } : t));
-                            }
-                            setEditItem(null);
-                          }}
-                        >
-                          <Text style={{ fontSize: 13, fontWeight: "600", color: c.primary }}>保存</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.manageCancelBtn, { backgroundColor: c.surfaceSecondary }]}
-                          onPress={() => setEditItem(null)}
-                        >
-                          <Text style={{ fontSize: 13, fontWeight: "500", color: c.textSecondary }}>取消</Text>
-                        </TouchableOpacity>
-                      </>
-                    ) : (
-                      <>
-                        <TouchableOpacity
-                          style={[styles.manageEditBtn, { backgroundColor: c.surfaceSecondary }]}
-                          onPress={() => setEditItem({ id: item.id, name: "name" in item ? (item as any).name : "" })}
-                        >
-                          <Ionicons name="pencil" size={14} color={c.textSecondary} />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.manageDeleteBtn, { backgroundColor: c.errorBg }]}
-                          onPress={() => {
-                            Alert.alert("削除", `「${"name" in item ? (item as any).name : ""}」を削除しますか？`, [
-                              { text: "キャンセル", style: "cancel" },
-                              {
-                                text: "削除",
-                                style: "destructive",
-                                onPress: async () => {
-                                  if (manageTarget === "folder") {
-                                    await deleteFolder(item.id);
-                                    setFolders((prev) => prev.filter((f) => f.id !== item.id));
-                                  } else {
-                                    await deleteTag(item.id);
-                                    setTags((prev) => prev.filter((t) => t.id !== item.id));
-                                  }
-                                },
-                              },
-                            ]);
-                          }}
-                        >
-                          <Ionicons name="trash-outline" size={14} color={c.error} />
-                        </TouchableOpacity>
-                      </>
-                    )}
-                  </View>
-                </View>
-              ))}
-              {(manageTarget === "folder" ? folders : tags).length === 0 && (
-                <Text style={[styles.manageEmpty, { color: c.textMuted }]}>
-                  {manageTarget === "folder" ? "フォルダがありません" : "タグがありません"}
+        <View style={styles.modalContainer}>
+          {/* 背景オーバーレイ（フェード） */}
+          <Animated.View
+            style={[styles.modalBackdrop, { backgroundColor: c.overlay, opacity: backdropOpacity }]}
+            pointerEvents={modalVisible ? "auto" : "none"}
+          >
+            <TouchableOpacity
+              style={StyleSheet.absoluteFill}
+              activeOpacity={1}
+              onPress={handleModalClose}
+            />
+          </Animated.View>
+
+          {/* コンテンツ（スケール + フェード） */}
+          <Animated.View
+            style={[
+              styles.modalContent,
+              {
+                backgroundColor: c.surface,
+                transform: [{ scale: contentScale }],
+              },
+            ]}
+          >
+            <TouchableOpacity activeOpacity={1} onPress={() => {}}>
+              <View style={[styles.modalHeader, { borderBottomColor: c.divider }]}>
+                <Text style={[styles.modalTitle, { color: c.textPrimary }]}>
+                  {manageTarget === "folder" ? "フォルダ" : "タグ"}
                 </Text>
-              )}
-            </ScrollView>
-          </TouchableOpacity>
-        </TouchableOpacity>
+                <TouchableOpacity onPress={handleModalClose}>
+                  <Text style={[styles.modalClose, { color: c.primary }]}>閉じる</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={[styles.manageRow, { borderBottomColor: c.divider, backgroundColor: c.surface }]}>
+                <TextInput
+                  style={[styles.manageInput, { backgroundColor: c.background, borderColor: c.border, color: c.textPrimary }]}
+                  value={createName}
+                  onChangeText={setCreateName}
+                  placeholder={manageTarget === "folder" ? "新しいフォルダ名" : "新しいタグ名"}
+                  placeholderTextColor={c.textMuted}
+                />
+                <TouchableOpacity
+                  style={[styles.manageSaveBtn, { backgroundColor: c.primaryBg }]}
+                  onPress={async () => {
+                    if (!createName.trim()) return;
+                    if (manageTarget === "folder") {
+                      const { data } = await createFolder(createName.trim());
+                      if (data) setFolders((prev) => [...prev, data]);
+                    } else {
+                      const { data } = await createTag(createName.trim());
+                      if (data) setTags((prev) => [...prev, data]);
+                    }
+                    setCreateName("");
+                  }}
+                >
+                  <Text style={{ fontSize: 13, fontWeight: "600", color: c.primary }}>作成</Text>
+                </TouchableOpacity>
+              </View>
+              <ScrollView style={{ maxHeight: 400 }}>
+                {(manageTarget === "folder" ? folders : tags).map((item) => (
+                  <View key={item.id} style={[styles.manageRow, { borderBottomColor: c.divider, backgroundColor: c.surface }]}>
+                    {editItem?.id === item.id ? (
+                      <TextInput
+                        style={[styles.manageInput, { backgroundColor: c.background, borderColor: c.border, color: c.textPrimary }]}
+                        value={editItem.name}
+                        onChangeText={(t) => setEditItem({ ...editItem, name: t })}
+                        autoFocus
+                        placeholder="名前"
+                        placeholderTextColor={c.textMuted}
+                      />
+                    ) : (
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}>
+                        {"color" in item && item.color && (
+                          <View style={[styles.colorDot, { backgroundColor: item.color }]} />
+                        )}
+                        <Text style={[styles.manageName, { color: c.textPrimary }]}>
+                          {"name" in item ? (item as any).name : ""}
+                        </Text>
+                      </View>
+                    )}
+                    <View style={{ flexDirection: "row", gap: 6 }}>
+                      {editItem?.id === item.id ? (
+                        <>
+                          <TouchableOpacity
+                            style={[styles.manageSaveBtn, { backgroundColor: c.primaryBg }]}
+                            onPress={async () => {
+                              if (manageTarget === "folder") {
+                                await updateFolder(item.id, { name: editItem.name });
+                                setFolders((prev) => prev.map((f) => f.id === item.id ? { ...f, name: editItem.name } : f));
+                              } else {
+                                await updateTag(item.id, { name: editItem.name });
+                                setTags((prev) => prev.map((t) => t.id === item.id ? { ...t, name: editItem.name } : t));
+                              }
+                              setEditItem(null);
+                            }}
+                          >
+                            <Text style={{ fontSize: 13, fontWeight: "600", color: c.primary }}>保存</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[styles.manageCancelBtn, { backgroundColor: c.surfaceSecondary }]}
+                            onPress={() => setEditItem(null)}
+                          >
+                            <Text style={{ fontSize: 13, fontWeight: "500", color: c.textSecondary }}>取消</Text>
+                          </TouchableOpacity>
+                        </>
+                      ) : (
+                        <>
+                          <TouchableOpacity
+                            style={[styles.manageEditBtn, { backgroundColor: c.surfaceSecondary }]}
+                            onPress={() => setEditItem({ id: item.id, name: "name" in item ? (item as any).name : "" })}
+                          >
+                            <Ionicons name="pencil" size={14} color={c.textSecondary} />
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[styles.manageDeleteBtn, { backgroundColor: c.errorBg }]}
+                            onPress={() => {
+                              Alert.alert("削除", `「${"name" in item ? (item as any).name : ""}」を削除しますか？`, [
+                                { text: "キャンセル", style: "cancel" },
+                                {
+                                  text: "削除",
+                                  style: "destructive",
+                                  onPress: async () => {
+                                    if (manageTarget === "folder") {
+                                      await deleteFolder(item.id);
+                                      setFolders((prev) => prev.filter((f) => f.id !== item.id));
+                                    } else {
+                                      await deleteTag(item.id);
+                                      setTags((prev) => prev.filter((t) => t.id !== item.id));
+                                    }
+                                  },
+                                },
+                              ]);
+                            }}
+                          >
+                            <Ionicons name="trash-outline" size={14} color={c.error} />
+                          </TouchableOpacity>
+                        </>
+                      )}
+                    </View>
+                  </View>
+                ))}
+                {(manageTarget === "folder" ? folders : tags).length === 0 && (
+                  <Text style={[styles.manageEmpty, { color: c.textMuted }]}>
+                    {manageTarget === "folder" ? "フォルダがありません" : "タグがありません"}
+                  </Text>
+                )}
+              </ScrollView>
+            </TouchableOpacity>
+          </Animated.View>
+        </View>
       </Modal>
     </SafeAreaView>
   );
@@ -632,15 +694,25 @@ const styles = StyleSheet.create({
   },
 
   // ── Management Modal ──
-  modalOverlay: {
+  modalContainer: {
     flex: 1,
-    justifyContent: "flex-end",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
   },
   modalContent: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    width: "88%",
     maxHeight: "60%",
+    borderRadius: 20,
     paddingBottom: 32,
+    // shadow
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 24,
+    elevation: 10,
   },
   modalHeader: {
     flexDirection: "row",
