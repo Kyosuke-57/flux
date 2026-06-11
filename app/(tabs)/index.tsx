@@ -3,13 +3,18 @@ import {
   View, Text, TouchableOpacity, FlatList, StyleSheet,
   RefreshControl, ActivityIndicator,
 } from "react-native";
-import { router } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import { router, useFocusEffect } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../src/contexts/AuthContext";
 import { getAllMinutes } from "../../src/services/minutes";
 import { getSubscriptionStatus } from "../../src/services/subscription";
 import type { Minute } from "../../src/types";
-import { Colors, Typography, Spacing, BorderRadius, Shadows } from "../../src/theme";
+import { Colors, Spacing, BorderRadius, Shadows, theme } from "../../src/theme";
+import { useBounce, useHaptics, FadeInView, BounceInView } from "../../src/animations";
+import { useSettings } from "../../src/contexts/SettingsContext";
+import { HomeScreenSkeleton } from "../../src/components/Skeleton";
+import { GlassCard } from "../../src/components/Glass";
 
 function formatDate(dateStr: string) {
   const d = new Date(dateStr);
@@ -31,6 +36,10 @@ function secondsToHms(s: number) {
 
 export default function HomeScreen() {
   const { user, isLoading: authLoading } = useAuth();
+  const { settings } = useSettings();
+  const c = theme(settings.isDarkMode);
+  const haptics = useHaptics();
+  const recordBtn = useBounce({ scaleIn: 0.95 });
 
   const [minutes, setMinutes] = useState<Minute[]>([]);
   const [loading, setLoading] = useState(true);
@@ -80,6 +89,14 @@ export default function HomeScreen() {
     }
   }, [authLoading, fetchMinutes]);
 
+  useFocusEffect(
+    useCallback(() => {
+      if (!authLoading && user) {
+        fetchMinutes();
+      }
+    }, [authLoading, user, fetchMinutes]),
+  );
+
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     fetchMinutes();
@@ -90,10 +107,8 @@ export default function HomeScreen() {
   // -------- Auth loading ----------
   if (authLoading) {
     return (
-      <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color="#6366f1" />
-        </View>
+      <SafeAreaView style={[styles.container, { backgroundColor: c.background }]} edges={["top", "left", "right"]}>
+        <HomeScreenSkeleton />
       </SafeAreaView>
     );
   }
@@ -101,19 +116,16 @@ export default function HomeScreen() {
   // -------- Not logged in ----------
   if (!user) {
     return (
-      <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
-        <View style={styles.header}>
-          <Text style={styles.title}>OTOROKU</Text>
-          <Text style={styles.subtitle}>録音、文字起こし、整理</Text>
-        </View>
+      <SafeAreaView style={[styles.container, { backgroundColor: c.background }]} edges={["top", "left", "right"]}>
+        <View style={styles.header} />
         <View style={styles.center}>
-          <Text style={styles.signInPrompt}>サインインして始めよう</Text>
+          <Text style={[styles.signInPrompt, { color: c.textSecondary }]}>サインインして始めよう</Text>
           <TouchableOpacity
-            style={styles.signInButton}
-            onPress={() => router.push("/(auth)/login")}
+            style={[styles.signInButton, { backgroundColor: c.primary }]}
+            onPress={() => { haptics.mediumTap(); router.push("/(auth)/login"); }}
             activeOpacity={0.8}
           >
-            <Text style={styles.signInButtonText}>サインイン</Text>
+            <Text style={[styles.signInButtonText, { color: c.textInverse }]}>サインイン</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -122,7 +134,7 @@ export default function HomeScreen() {
 
   // -------- Main screen ----------
   return (
-    <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: c.background }]} edges={["top", "left", "right"]}>
       <FlatList
         data={recentMinutes}
         keyExtractor={(item) => item.id}
@@ -130,117 +142,124 @@ export default function HomeScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor="#6366f1"
-            colors={["#6366f1"]}
+            tintColor={c.primary}
+            colors={[c.primary]}
           />
         }
         contentContainerStyle={styles.listContent}
         ListHeaderComponent={
           <>
             {/* Header */}
-            <View style={styles.header}>
-              <Text style={styles.title}>OTOROKU</Text>
-              <Text style={styles.subtitle}>録音、文字起こし、整理</Text>
-            </View>
+            <FadeInView delay={0} style={styles.header} />
 
             {/* Usage bar */}
             {usage && (
-              <View style={styles.usageBar}>
-                <View style={styles.usageRow}>
-                  <Text style={styles.usageText}>
-                    {usage.plan.charAt(0).toUpperCase() + usage.plan.slice(1)} プラン
-                  </Text>
-                  <Text style={styles.usageText}>
-                    {secondsToHms(usage.usageSeconds)} /{" "}
-                    {usage.limitSeconds === Infinity
-                      ? "∞"
-                      : secondsToHms(usage.limitSeconds)}
-                  </Text>
-                </View>
-                {usage.limitSeconds !== Infinity && (
-                  <View style={styles.usageTrack}>
-                    <View
-                      style={[
-                        styles.usageFill,
-                        {
-                          width: `${Math.min(
-                            100,
-                            (usage.usageSeconds / usage.limitSeconds) * 100
-                          )}%`,
-                        },
-                      ]}
-                    />
+              <FadeInView delay={100}>
+                <GlassCard intensity={35} style={styles.usageBar}>
+                  <View style={styles.usageRow}>
+                    <Text style={[styles.usageText, { color: c.textSecondary }]}>
+                      {usage.plan.charAt(0).toUpperCase() + usage.plan.slice(1)} プラン
+                    </Text>
+                    <Text style={[styles.usageText, { color: c.textSecondary }]}>
+                      {secondsToHms(usage.usageSeconds)} /{" "}
+                      {usage.limitSeconds === Infinity
+                        ? "∞"
+                        : secondsToHms(usage.limitSeconds)}
+                    </Text>
                   </View>
-                )}
-              </View>
+                  {usage.limitSeconds !== Infinity && (
+                    <View style={[styles.usageTrack, { backgroundColor: c.border }]}>
+                      <View
+                        style={[
+                          styles.usageFill,
+                          {
+                            backgroundColor: c.primary,
+                            width: `${Math.min(
+                              100,
+                              (usage.usageSeconds / usage.limitSeconds) * 100
+                            )}%`,
+                          },
+                        ]}
+                      />
+                    </View>
+                  )}
+                </GlassCard>
+              </FadeInView>
             )}
 
             {/* Quick Record button */}
-            <TouchableOpacity
-              style={styles.recordButton}
-              onPress={() => router.push("/record")}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.recordIcon}>🎤</Text>
-              <Text style={styles.recordText}>タップして録音</Text>
-              <Text style={styles.recordSubtext}>または音声ファイルをインポート</Text>
-            </TouchableOpacity>
+            <BounceInView delay={200} style={styles.recordWrapper}>
+              <TouchableOpacity
+                style={[styles.recordButton, { backgroundColor: c.primary }]}
+                onPress={() => { haptics.heavyTap(); router.push("/record"); }}
+                onPressIn={recordBtn.onPressIn}
+                onPressOut={recordBtn.onPressOut}
+                activeOpacity={0.8}
+              >
+                <View style={styles.recordIconCircle}>
+                  <Ionicons name="mic" size={28} color="#fff" />
+                </View>
+                <View style={styles.recordTextGroup}>
+                  <Text style={[styles.recordText, { color: c.textInverse }]}>タップして録音</Text>
+                  <Text style={[styles.recordSubtext, { color: c.primaryBg }]}>または音声ファイルをインポート</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={c.primaryBg} />
+              </TouchableOpacity>
+            </BounceInView>
 
             {/* Section title */}
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>最近の議事録</Text>
+              <Text style={[styles.sectionTitle, { color: c.textPrimary }]}>最近の議事録</Text>
               {minutes.length > 5 && (
                 <TouchableOpacity onPress={() => router.push("/(tabs)/minutes")}>
-                  <Text style={styles.seeAll}>すべて見る</Text>
+                  <Text style={[styles.seeAll, { color: c.primary }]}>すべて見る</Text>
                 </TouchableOpacity>
               )}
             </View>
           </>
         }
         ListEmptyComponent={
-          loading ? (
-            <View style={styles.center}>
-              <ActivityIndicator size="large" color="#6366f1" />
-            </View>
-          ) : (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyIcon}>📝</Text>
-              <Text style={styles.emptyTitle}>まだ議事録がありません</Text>
-              <Text style={styles.emptySubtext}>
+          loading ? null : (
+            <FadeInView delay={300} style={styles.emptyContainer}>
+              <Text style={[styles.emptyTitle, { color: c.textPrimary }]}>まだ議事録がありません</Text>
+              <Text style={[styles.emptySubtext, { color: c.textSecondary }]}>
                 上の録音ボタンをタップして最初の議事録を作成しましょう。
               </Text>
-            </View>
+            </FadeInView>
           )
         }
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.minuteItem}
-            onPress={() => router.push(`/minute/${item.id}`)}
-            activeOpacity={0.7}
-          >
-            <View style={styles.minuteLeft}>
-              <Text style={styles.minuteTitle} numberOfLines={1}>
-                {item.title}
-              </Text>
-              <Text style={styles.minuteDate}>{formatDate(item.created_at)}</Text>
-            </View>
-            <View style={styles.minuteRight}>
-              {item.tags && item.tags.length > 0 && (
-                <View style={styles.tagBadge}>
-                  <Text style={styles.tagBadgeText}>
-                    {item.tags.length} タグ
+        renderItem={({ item, index }) => (
+          <FadeInView delay={300 + index * 80} style={styles.minuteItemWrapper}>
+            <TouchableOpacity
+              onPress={() => { haptics.lightTap(); router.push(`/minute/${item.id}`); }}
+              activeOpacity={0.7}
+            >
+              <GlassCard intensity={30} style={styles.minuteItem}>
+                <View style={styles.minuteLeft}>
+                  <Text style={[styles.minuteTitle, { color: c.textPrimary }]} numberOfLines={1}>
+                    {item.title}
                   </Text>
+                  <Text style={[styles.minuteDate, { color: c.textMuted }]}>{formatDate(item.created_at)}</Text>
                 </View>
-              )}
-              <Text style={styles.chevron}>›</Text>
-            </View>
-          </TouchableOpacity>
+                <View style={styles.minuteRight}>
+                  {item.tags && item.tags.length > 0 && (
+                    <View style={[styles.tagBadge, { backgroundColor: c.primaryBg }]}>
+                      <Text style={[styles.tagBadgeText, { color: c.primary }]}>
+                        {item.tags.length} タグ
+                      </Text>
+                    </View>
+                  )}
+                  <Text style={[styles.chevron, { color: c.textMuted }]}>›</Text>
+                </View>
+              </GlassCard>
+            </TouchableOpacity>
+          </FadeInView>
         )}
       />
 
       {error && (
-        <View style={styles.errorBanner}>
-          <Text style={styles.errorText}>{error}</Text>
+        <View style={[styles.errorBanner, { backgroundColor: c.errorBg, borderTopColor: c.error }]}>
+          <Text style={[styles.errorText, { color: c.error }]}>{error}</Text>
         </View>
       )}
     </SafeAreaView>
@@ -261,11 +280,8 @@ const styles = StyleSheet.create({
   usageBar: {
     marginHorizontal: Spacing.xxl,
     marginTop: Spacing.md,
-    backgroundColor: Colors.primaryBg,
-    borderRadius: BorderRadius.md,
     padding: 14,
-    borderWidth: 1,
-    borderColor: Colors.borderLight,
+    borderRadius: BorderRadius.md,
   },
   usageRow: {
     flexDirection: "row",
@@ -286,19 +302,36 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
 
-  /* Record button */
-  recordButton: {
-    backgroundColor: Colors.primary,
+  /* Record button wrapper */
+  recordWrapper: {
     marginHorizontal: Spacing.xxl,
     marginTop: Spacing.xl,
-    paddingVertical: Spacing.xxl,
-    borderRadius: BorderRadius.lg,
+  },
+
+  /* Record button */
+  recordButton: {
+    flexDirection: "row",
     alignItems: "center",
+    backgroundColor: Colors.primary,
+    paddingVertical: Spacing.lg,
+    paddingHorizontal: Spacing.xl,
+    borderRadius: BorderRadius.lg,
+    gap: Spacing.md,
     ...Shadows.lg,
   },
-  recordIcon: { fontSize: 32 },
-  recordText: { fontSize: 18, fontWeight: "700", color: Colors.textInverse, marginTop: Spacing.sm },
-  recordSubtext: { fontSize: 13, color: Colors.primaryBg, marginTop: Spacing.xs },
+  recordIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  recordTextGroup: {
+    flex: 1,
+  },
+  recordText: { fontSize: 16, fontWeight: "700", color: Colors.textInverse },
+  recordSubtext: { fontSize: 12, color: Colors.primaryBg, marginTop: 2 },
 
   /* Section header */
   sectionHeader: {
@@ -319,7 +352,6 @@ const styles = StyleSheet.create({
     paddingTop: 48,
     paddingHorizontal: Spacing.xxxl,
   },
-  emptyIcon: { fontSize: 48, marginBottom: Spacing.md },
   emptyTitle: { fontSize: 18, fontWeight: "600", color: Colors.textPrimary },
   emptySubtext: {
     fontSize: 14,
@@ -330,17 +362,17 @@ const styles = StyleSheet.create({
   },
 
   /* Minute item */
+  minuteItemWrapper: {
+    marginHorizontal: Spacing.xxl,
+    marginBottom: Spacing.sm,
+  },
   minuteItem: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    backgroundColor: Colors.surface,
-    marginHorizontal: Spacing.xxl,
     paddingVertical: 14,
     paddingHorizontal: Spacing.lg,
     borderRadius: BorderRadius.md,
-    marginBottom: Spacing.sm,
-    ...Shadows.sm,
   },
   minuteLeft: { flex: 1, marginRight: Spacing.md },
   minuteTitle: { fontSize: 15, fontWeight: "600", color: Colors.textPrimary },

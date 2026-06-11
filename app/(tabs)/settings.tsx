@@ -9,18 +9,23 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
+  Modal,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
-import * as SecureStore from "expo-secure-store";
+
+import { Ionicons } from "@expo/vector-icons";
 
 import { useAuth } from "../../src/contexts/AuthContext";
+import { useSettings } from "../../src/contexts/SettingsContext";
+import { useToast } from "../../src/contexts/ToastContext";
 import { signOut } from "../../src/services/auth";
-import { getSubscriptionStatus } from "../../src/services/subscription";
+import { getSubscriptionStatus, PLANS, type PlanInfo } from "../../src/services/subscription";
 import { getAllTemplates } from "../../src/services/templates";
-import { Colors } from "../../src/theme";
-
-const SECURE_STORE_API_KEY = "openrouter_api_key";
+import { getAllFolders, createFolder, updateFolder, deleteFolder } from "../../src/services/folders";
+import { getAllTags, createTag, updateTag, deleteTag } from "../../src/services/tags";
+import type { Folder, Tag } from "../../src/types";
+import { theme } from "../../src/theme";
 
 function formatTime(seconds: number): string {
   const mins = Math.floor(seconds / 60);
@@ -40,6 +45,9 @@ function formatLimit(seconds: number): string {
 
 export default function SettingsScreen() {
   const { user, isLoading: authLoading } = useAuth();
+  const { settings, updateSetting } = useSettings();
+  const toast = useToast();
+  const c = theme(settings.isDarkMode);
 
   // Subscription state
   const [subscription, setSubscription] = useState<{
@@ -49,47 +57,16 @@ export default function SettingsScreen() {
   } | null>(null);
   const [subLoading, setSubLoading] = useState(true);
 
-  // API key state
-  const [apiKey, setApiKey] = useState("");
-  const [apiKeyDirty, setApiKeyDirty] = useState(false);
-  const [apiKeyLoading, setApiKeyLoading] = useState(true);
-
-  // Language detection
-  const [languageAuto, setLanguageAuto] = useState(true);
-
-  // Offline mode
-  const [offlineMode, setOfflineMode] = useState(false);
-
   // Templates
   const [templateCount, setTemplateCount] = useState(0);
   const [templatesLoading, setTemplatesLoading] = useState(true);
 
-  // Load persisted API key
-  useEffect(() => {
-    (async () => {
-      try {
-        const stored = await SecureStore.getItemAsync(SECURE_STORE_API_KEY);
-        if (stored) setApiKey(stored);
-      } catch {
-        // SecureStore may fail in some environments
-      } finally {
-        setApiKeyLoading(false);
-      }
-    })();
-  }, []);
-
-  // Save API key when it changes (debounced via blur or on end editing)
-  const saveApiKey = useCallback(async (key: string) => {
-    try {
-      if (key.trim()) {
-        await SecureStore.setItemAsync(SECURE_STORE_API_KEY, key.trim());
-      } else {
-        await SecureStore.deleteItemAsync(SECURE_STORE_API_KEY);
-      }
-    } catch (e) {
-      Alert.alert("エラー", "APIキーの保存に失敗しました");
-    }
-  }, []);
+  // Folder & Tag management
+  const [folders, setFolders] = useState<Folder[]>([]);
+  const [tags, setTags] = useState<Tag[]>([]);
+  const [manageTarget, setManageTarget] = useState<"folder" | "tag" | null>(null);
+  const [editItem, setEditItem] = useState<{ id: string; name: string } | null>(null);
+  const [createName, setCreateName] = useState("");
 
   // Load subscription data
   useEffect(() => {
@@ -121,19 +98,22 @@ export default function SettingsScreen() {
     })();
   }, [user]);
 
+  // Load folders & tags
+  useEffect(() => {
+    (async () => {
+      if (!user) return;
+      const [{ data: f }, { data: t }] = await Promise.all([getAllFolders(), getAllTags()]);
+      if (f) setFolders(f);
+      if (t) setTags(t);
+    })();
+  }, [user]);
+
   const handleSignOut = async () => {
     try {
       await signOut();
       router.replace("/(tabs)");
     } catch {
       Alert.alert("エラー", "ログアウトに失敗しました");
-    }
-  };
-
-  const handleApiKeyBlur = () => {
-    if (apiKeyDirty) {
-      saveApiKey(apiKey);
-      setApiKeyDirty(false);
     }
   };
 
@@ -151,27 +131,26 @@ export default function SettingsScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
-      <Text style={styles.title}>設定</Text>
+    <SafeAreaView style={[styles.container, { backgroundColor: c.background }]} edges={["top", "left", "right"]}>
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
         {/* ─── アカウント ─── */}
-        <Text style={styles.section}>アカウント</Text>
-        <View style={styles.card}>
+        <Text style={[styles.section, { color: c.textMuted }]}>アカウント</Text>
+        <View style={[styles.card, { backgroundColor: c.surface, borderColor: c.cardBorder }]}>
           {authLoading ? (
             <View style={styles.row}>
-              <ActivityIndicator size="small" color={Colors.primary} />
+              <ActivityIndicator size="small" color={c.primary} />
             </View>
           ) : user ? (
             <>
               <View style={styles.row}>
                 <View>
-                  <Text style={styles.rowText}>ログイン中</Text>
-                  <Text style={styles.emailText}>{user.email}</Text>
+                  <Text style={[styles.rowText, { color: c.textPrimary }]}>ログイン中</Text>
+                  <Text style={[styles.emailText, { color: c.textSecondary }]}>{user.email}</Text>
                 </View>
               </View>
               <View style={styles.divider} />
               <TouchableOpacity style={styles.row} onPress={handleSignOut}>
-                <Text style={styles.signOutText}>ログアウト</Text>
+                <Text style={[styles.signOutText, { color: c.error }]}>ログアウト</Text>
               </TouchableOpacity>
             </>
           ) : (
@@ -180,212 +159,357 @@ export default function SettingsScreen() {
               onPress={() => router.push("/(auth)/login")}
             >
               <Text style={styles.primaryButtonText}>サインイン</Text>
-              <Text style={styles.chevron}>→</Text>
+              <Text style={[styles.chevron, { color: c.textMuted }]}>→</Text>
             </TouchableOpacity>
           )}
         </View>
 
-        {/* ─── サブスクリプション ─── */}
-        <Text style={styles.section}>サブスクリプション</Text>
-        <View style={styles.card}>
-          {subLoading ? (
-            <View style={styles.row}>
-              <ActivityIndicator size="small" color={Colors.primary} />
-            </View>
-          ) : subscription ? (
-            <>
-              <View style={styles.row}>
-                <Text style={styles.rowText}>現在のプラン</Text>
-                <View
+        {/* ─── 表示設定 ─── */}
+        <Text style={[styles.section, { color: c.textMuted }]}>表示設定</Text>
+        <View style={[styles.card, { backgroundColor: c.surface, borderColor: c.cardBorder }]}>
+          <View style={styles.row}>
+            <Text style={[styles.rowText, { color: c.textPrimary }]}>ダークモード</Text>
+            <Switch
+              value={settings.isDarkMode}
+              onValueChange={(v) => updateSetting("isDarkMode", v)}
+              trackColor={{ false: c.toggleBg, true: c.primaryBg }}
+              thumbColor={settings.isDarkMode ? c.primary : "#fff"}
+            />
+          </View>
+          <View style={styles.divider} />
+          <View style={styles.row}>
+            <Text style={[styles.rowText, { color: c.textPrimary }]}>録音エフェクト</Text>
+            <View style={[styles.toggleGroup, { backgroundColor: c.surfaceSecondary }]}>
+              {[
+                { label: "波紋", value: "ripple" },
+                { label: "波形", value: "waveform" },
+                { label: "パルス", value: "pulse" },
+              ].map((opt) => (
+                <TouchableOpacity
+                  key={opt.value}
                   style={[
-                    styles.badge,
-                    subscription.plan === "pro" || subscription.plan === "byok"
-                      ? styles.badgePro
-                      : styles.badgeFree,
+                    styles.toggleOption,
+                    settings.recordingEffect === opt.value && { backgroundColor: settings.isDarkMode ? "#334155" : "#fff", ...(settings.isDarkMode ? {} : { shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 2, elevation: 2 }) },
                   ]}
+                  onPress={() => updateSetting("recordingEffect", opt.value as any)}
                 >
                   <Text
                     style={[
-                      styles.badgeText,
-                      subscription.plan === "pro" || subscription.plan === "byok"
-                        ? styles.badgeTextPro
-                        : styles.badgeTextFree,
+                      styles.toggleText,
+                      { color: c.textSecondary },
+                      settings.recordingEffect === opt.value && { color: c.primary, fontWeight: "600" },
                     ]}
                   >
-                    {planLabel(subscription.plan)}
+                    {opt.label}
                   </Text>
-                </View>
-              </View>
-              <View style={styles.divider} />
-              <View style={styles.row}>
-                <Text style={styles.rowText}>使用量</Text>
-                <Text style={styles.rowValue}>
-                  {formatTime(subscription.usageSeconds)} /{" "}
-                  {formatLimit(subscription.limitSeconds)}
-                </Text>
-              </View>
-              {subscription.limitSeconds !== Infinity && (
-                <View style={styles.progressContainer}>
-                  <View style={styles.progressTrack}>
-                    <View
-                      style={[
-                        styles.progressFill,
-                        {
-                          width: `${Math.min(
-                            (subscription.usageSeconds /
-                              subscription.limitSeconds) *
-                              100,
-                            100
-                          )}%`,
-                        },
-                      ]}
-                    />
-                  </View>
-                </View>
-              )}
-              <View style={styles.divider} />
-              <TouchableOpacity
-                style={styles.row}
-                onPress={() => Alert.alert("管理", "サブスクリプション管理 - 準備中")}
-              >
-                <Text style={styles.rowText}>サブスクリプション管理</Text>
-                <Text style={styles.chevron}>›</Text>
-              </TouchableOpacity>
-            </>
-          ) : (
-            <View style={styles.row}>
-              <Text style={styles.rowValue}>サインインしてサブスクリプション詳細を表示</Text>
+                </TouchableOpacity>
+              ))}
             </View>
-          )}
+          </View>
         </View>
 
-        {/* ─── 文字起こし ─── */}
-        <Text style={styles.section}>文字起こし</Text>
-        <View style={styles.card}>
-          {/* API Key */}
-          <View style={styles.columnRow}>
-            <Text style={styles.rowText}>OpenRouter APIキー</Text>
-            {apiKeyLoading ? (
-              <ActivityIndicator size="small" color={Colors.primary} />
-            ) : (
-              <TextInput
-                style={styles.apiKeyInput}
-                value={apiKey}
-                onChangeText={(t) => {
-                  setApiKey(t);
-                  setApiKeyDirty(true);
+        {/* ─── 試験的プラン切替 ─── */}
+        <Text style={[styles.section, { color: c.textMuted }]}>試験設定</Text>
+        <View style={[styles.card, { backgroundColor: c.surface, borderColor: c.cardBorder }]}>
+          <View style={styles.row}>
+            <Text style={[styles.rowText, { color: c.textPrimary }]}>プラン切替（テスト）</Text>
+          </View>
+          {(["free", "pro", "byok"] as const).map((planId) => {
+            const plan = PLANS.find((p) => p.id === planId)!;
+            const isCurrent = (subscription?.plan ?? "free") === planId;
+            return (
+              <TouchableOpacity
+                key={planId}
+                style={[styles.manageRow, { borderBottomColor: c.divider, paddingHorizontal: 16 }]}
+                onPress={async () => {
+                  setSubscription((prev) => prev ? { ...prev, plan: planId } : null);
+                  try {
+                    const { data } = await getSubscriptionStatus();
+                    if (data) {
+                      setSubscription({ ...data, plan: planId });
+                    }
+                  } catch {}
                 }}
-                onBlur={handleApiKeyBlur}
-                placeholder="sk-..."
-                placeholderTextColor="#94a3b8"
-                autoCapitalize="none"
-                autoCorrect={false}
-                secureTextEntry
-              />
-            )}
-          </View>
-          <View style={styles.divider} />
-
-          {/* Language Detection */}
-          <View style={styles.row}>
-            <Text style={styles.rowText}>言語</Text>
-            <TouchableOpacity
-              style={styles.toggleGroup}
-              onPress={() => setLanguageAuto(!languageAuto)}
-            >
-              <View
-                style={[
-                  styles.toggleOption,
-                  languageAuto && styles.toggleOptionActive,
-                ]}
               >
-                <Text
-                  style={[
-                    styles.toggleText,
-                    languageAuto && styles.toggleTextActive,
-                  ]}
-                >
-                  自動
-                </Text>
-              </View>
-              <View
-                style={[
-                  styles.toggleOption,
-                  !languageAuto && styles.toggleOptionActive,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.toggleText,
-                    !languageAuto && styles.toggleTextActive,
-                  ]}
-                >
-                  手動
-                </Text>
-              </View>
-            </TouchableOpacity>
-          </View>
-          <View style={styles.divider} />
-
-          {/* Offline Mode */}
-          <View style={styles.row}>
-            <Text style={styles.rowText}>オフラインモード</Text>
-            <Switch
-              value={offlineMode}
-              onValueChange={setOfflineMode}
-              trackColor={{ false: "#e2e8f0", true: "#c7d2fe" }}
-              thumbColor={offlineMode ? Colors.primary : "#fff"}
-            />
-          </View>
+                <Text style={[styles.manageName, { color: c.textPrimary }]}>{plan.name} — {plan.price}</Text>
+                {isCurrent && (
+                  <View style={[styles.badge, { backgroundColor: c.primary }]}>
+                    <Text style={{ color: "#fff", fontSize: 11, fontWeight: "700" }}>現在</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })}
         </View>
+
+        {/* ─── サブスクリプション ─── */}
+        <Text style={[styles.section, { color: c.textMuted }]}>プラン</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ paddingHorizontal: 24 }}>
+          {PLANS.map((plan) => {
+            const isCurrent = subscription?.plan === plan.id;
+            const isPro = plan.id === "pro";
+            return (
+              <TouchableOpacity
+                key={plan.id}
+                style={[
+                  styles.planCard,
+                  {
+                    backgroundColor: isPro ? c.primary : c.surface,
+                    borderColor: isPro ? c.primary : c.cardBorder,
+                  },
+                  isCurrent && { borderColor: c.primary, borderWidth: 2 },
+                ]}
+                onPress={() => {
+                  if (!isCurrent) {
+                    Alert.alert(
+                      `${plan.name}にアップグレード`,
+                      `${plan.price}で${plan.name}プランに変更しますか？`,
+                      [
+                        { text: "キャンセル", style: "cancel" },
+                        {
+                          text: "変更する",
+                          onPress: async () => {
+                            // TODO: RevenueCat purchase flow
+                            toast.showToast({ message: `${plan.name}プランに変更しました`, type: "success" });
+                          },
+                        },
+                      ],
+                    );
+                  }
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.planName, { color: isPro ? "#fff" : c.textPrimary }]}>
+                  {plan.name}
+                </Text>
+                <Text style={[styles.planPrice, { color: isPro ? "rgba(255,255,255,0.9)" : c.primary }]}>
+                  {plan.price}
+                </Text>
+                <Text style={[styles.planMinutes, { color: isPro ? "rgba(255,255,255,0.7)" : c.textMuted }]}>
+                  月{plan.monthlyMinutes}分
+                </Text>
+                <View style={{ marginTop: 8, gap: 4 }}>
+                  {plan.features.map((f) => (
+                    <View key={f} style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                      <Ionicons name="checkmark" size={12} color={isPro ? "rgba(255,255,255,0.7)" : c.primary} />
+                      <Text style={[styles.planFeature, { color: isPro ? "rgba(255,255,255,0.7)" : c.textMuted }]}>
+                        {f}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+                {isCurrent && (
+                  <View style={[styles.planBadge, { backgroundColor: c.primary }]}>
+                    <Text style={{ color: "#fff", fontSize: 11, fontWeight: "700" }}>現在</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
 
         {/* ─── テンプレート ─── */}
-        <Text style={styles.section}>テンプレート</Text>
-        <View style={styles.card}>
+        <Text style={[styles.section, { color: c.textMuted }]}>テンプレート</Text>
+        <View style={[styles.card, { backgroundColor: c.surface, borderColor: c.cardBorder }]}>
           <View style={styles.row}>
-            <Text style={styles.rowText}>保存済みテンプレート</Text>
+            <Text style={[styles.rowText, { color: c.textPrimary }]}>保存済みテンプレート</Text>
             {templatesLoading ? (
-              <ActivityIndicator size="small" color={Colors.primary} />
+              <ActivityIndicator size="small" color={c.primary} />
             ) : (
-              <Text style={styles.rowValue}>{templateCount}</Text>
+              <Text style={[styles.rowValue, { color: c.textMuted }]}>{templateCount}</Text>
             )}
           </View>
           <View style={styles.divider} />
           <TouchableOpacity
             style={styles.row}
-            onPress={() =>
-              Alert.alert(
-                "テンプレート",
-                `テンプレートが ${templateCount} 個あります。管理機能は準備中です。`
-              )
-            }
+            onPress={() => router.push("/templates")}
           >
-            <Text style={styles.rowText}>テンプレート管理</Text>
-            <Text style={styles.chevron}>›</Text>
+            <Text style={[styles.rowText, { color: c.textPrimary }]}>テンプレート管理</Text>
+            <Text style={[styles.chevron, { color: c.textMuted }]}>›</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* ─── 整理 ─── */}
+        <Text style={[styles.section, { color: c.textMuted }]}>整理</Text>
+        <View style={[styles.card, { backgroundColor: c.surface, borderColor: c.cardBorder }]}>
+          <TouchableOpacity style={styles.row} onPress={() => setManageTarget("folder")}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <Ionicons name="folder" size={16} color={c.textMuted} />
+              <Text style={[styles.rowText, { color: c.textPrimary }]}>フォルダ管理</Text>
+            </View>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <Text style={[styles.rowValue, { color: c.textMuted }]}>{folders.length}</Text>
+              <Text style={[styles.chevron, { color: c.textMuted }]}>›</Text>
+            </View>
+          </TouchableOpacity>
+          <View style={styles.divider} />
+          <TouchableOpacity style={styles.row} onPress={() => setManageTarget("tag")}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <Ionicons name="pricetag-outline" size={16} color={c.textMuted} />
+              <Text style={[styles.rowText, { color: c.textPrimary }]}>タグ管理</Text>
+            </View>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <Text style={[styles.rowValue, { color: c.textMuted }]}>{tags.length}</Text>
+              <Text style={[styles.chevron, { color: c.textMuted }]}>›</Text>
+            </View>
           </TouchableOpacity>
         </View>
 
         {/* ─── アプリ情報 ─── */}
-        <Text style={styles.section}>アプリ情報</Text>
-        <View style={styles.card}>
+        <Text style={[styles.section, { color: c.textMuted }]}>アプリ情報</Text>
+        <View style={[styles.card, { backgroundColor: c.surface, borderColor: c.cardBorder }]}>
           <View style={styles.row}>
-            <Text style={styles.rowText}>バージョン</Text>
-            <Text style={styles.rowValue}>1.0.0</Text>
+            <Text style={[styles.rowText, { color: c.textPrimary }]}>バージョン</Text>
+            <Text style={[styles.rowValue, { color: c.textMuted }]}>1.0.0</Text>
           </View>
         </View>
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      {/* ─── フォルダ/タグ管理モーダル ─── */}
+      <Modal
+        visible={manageTarget !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setManageTarget(null)}
+      >
+        <TouchableOpacity style={[styles.modalOverlay, { backgroundColor: c.overlay }]} activeOpacity={1} onPress={() => setManageTarget(null)}>
+          <TouchableOpacity activeOpacity={1} onPress={() => {}} style={[styles.modalContent, { backgroundColor: c.surface }]}>
+            <View style={[styles.modalHeader, { borderBottomColor: c.divider }]}>
+              <Text style={[styles.modalTitle, { color: c.textPrimary }]}>
+                {manageTarget === "folder" ? "フォルダ" : "タグ"}
+              </Text>
+              <TouchableOpacity onPress={() => setManageTarget(null)}>
+                <Text style={[styles.modalClose, { color: c.primary }]}>閉じる</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={[styles.manageRow, { borderBottomColor: c.divider, backgroundColor: c.surface }]}>
+              <TextInput
+                style={[styles.manageInput, { backgroundColor: c.background, borderColor: c.border, color: c.textPrimary }]}
+                value={createName}
+                onChangeText={setCreateName}
+                placeholder={manageTarget === "folder" ? "新しいフォルダ名" : "新しいタグ名"}
+                placeholderTextColor={c.textMuted}
+              />
+              <TouchableOpacity
+                style={[styles.manageSaveBtn, { backgroundColor: c.primaryBg }]}
+                onPress={async () => {
+                  if (!createName.trim()) return;
+                  if (manageTarget === "folder") {
+                    const { data } = await createFolder(createName.trim());
+                    if (data) setFolders((prev) => [...prev, data]);
+                  } else {
+                    const { data } = await createTag(createName.trim());
+                    if (data) setTags((prev) => [...prev, data]);
+                  }
+                  setCreateName("");
+                }}
+              >
+                <Text style={{ fontSize: 13, fontWeight: "600", color: c.primary }}>作成</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={{ maxHeight: 400 }}>
+              {(manageTarget === "folder" ? folders : tags).map((item) => (
+                <View key={item.id} style={[styles.manageRow, { borderBottomColor: c.divider, backgroundColor: c.surface }]}>
+                  {editItem?.id === item.id ? (
+                    <TextInput
+                      style={[styles.manageInput, { backgroundColor: c.background, borderColor: c.border, color: c.textPrimary }]}
+                      value={editItem.name}
+                      onChangeText={(t) => setEditItem({ ...editItem, name: t })}
+                      autoFocus
+                      placeholder="名前"
+                      placeholderTextColor={c.textMuted}
+                    />
+                  ) : (
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}>
+                      {"color" in item && item.color && (
+                        <View style={[styles.colorDot, { backgroundColor: item.color }]} />
+                      )}
+                      <Text style={[styles.manageName, { color: c.textPrimary }]}>
+                        {"name" in item ? (item as any).name : ""}
+                      </Text>
+                    </View>
+                  )}
+                  <View style={{ flexDirection: "row", gap: 6 }}>
+                    {editItem?.id === item.id ? (
+                      <>
+                        <TouchableOpacity
+                          style={[styles.manageSaveBtn, { backgroundColor: c.primaryBg }]}
+                          onPress={async () => {
+                            if (manageTarget === "folder") {
+                              await updateFolder(item.id, { name: editItem.name });
+                              setFolders((prev) => prev.map((f) => f.id === item.id ? { ...f, name: editItem.name } : f));
+                            } else {
+                              await updateTag(item.id, { name: editItem.name });
+                              setTags((prev) => prev.map((t) => t.id === item.id ? { ...t, name: editItem.name } : t));
+                            }
+                            setEditItem(null);
+                          }}
+                        >
+                          <Text style={{ fontSize: 13, fontWeight: "600", color: c.primary }}>保存</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.manageCancelBtn, { backgroundColor: c.surfaceSecondary }]}
+                          onPress={() => setEditItem(null)}
+                        >
+                          <Text style={{ fontSize: 13, fontWeight: "500", color: c.textSecondary }}>取消</Text>
+                        </TouchableOpacity>
+                      </>
+                    ) : (
+                      <>
+                        <TouchableOpacity
+                          style={[styles.manageEditBtn, { backgroundColor: c.surfaceSecondary }]}
+                          onPress={() => setEditItem({ id: item.id, name: "name" in item ? (item as any).name : "" })}
+                        >
+                          <Ionicons name="pencil" size={14} color={c.textSecondary} />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.manageDeleteBtn, { backgroundColor: c.errorBg }]}
+                          onPress={() => {
+                            Alert.alert("削除", `「${"name" in item ? (item as any).name : ""}」を削除しますか？`, [
+                              { text: "キャンセル", style: "cancel" },
+                              {
+                                text: "削除",
+                                style: "destructive",
+                                onPress: async () => {
+                                  if (manageTarget === "folder") {
+                                    await deleteFolder(item.id);
+                                    setFolders((prev) => prev.filter((f) => f.id !== item.id));
+                                  } else {
+                                    await deleteTag(item.id);
+                                    setTags((prev) => prev.filter((t) => t.id !== item.id));
+                                  }
+                                },
+                              },
+                            ]);
+                          }}
+                        >
+                          <Ionicons name="trash-outline" size={14} color={c.error} />
+                        </TouchableOpacity>
+                      </>
+                    )}
+                  </View>
+                </View>
+              ))}
+              {(manageTarget === "folder" ? folders : tags).length === 0 && (
+                <Text style={[styles.manageEmpty, { color: c.textMuted }]}>
+                  {manageTarget === "folder" ? "フォルダがありません" : "タグがありません"}
+                </Text>
+              )}
+            </ScrollView>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#FAFAFA" },
+  container: { flex: 1 },
   title: {
     fontSize: 28,
     fontWeight: "700",
-    color: "#0f172a",
     paddingHorizontal: 24,
     paddingTop: 16,
   },
@@ -395,7 +519,6 @@ const styles = StyleSheet.create({
   section: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#64748b",
     paddingHorizontal: 24,
     marginBottom: 8,
     marginTop: 8,
@@ -405,12 +528,15 @@ const styles = StyleSheet.create({
 
   // ── Card ──
   card: {
-    backgroundColor: "#fff",
     marginHorizontal: 24,
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#f1f5f9",
     overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 2,
   },
 
   // ── Rows ──
@@ -426,13 +552,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
   },
-  rowText: { fontSize: 15, color: "#0f172a" },
-  rowValue: { fontSize: 14, color: "#94a3b8" },
-  emailText: { fontSize: 14, color: Colors.primary, marginTop: 2 },
-  chevron: { fontSize: 20, color: "#94a3b8" },
+  rowText: { fontSize: 15 },
+  rowValue: { fontSize: 14 },
+  emailText: { fontSize: 14, marginTop: 2 },
+  chevron: { fontSize: 20 },
   divider: {
     height: 1,
-    backgroundColor: "#f8fafc",
     marginHorizontal: 16,
   },
 
@@ -440,7 +565,6 @@ const styles = StyleSheet.create({
   primaryButtonText: {
     fontSize: 15,
     fontWeight: "600",
-    color: Colors.primary,
   },
   signOutText: {
     fontSize: 15,
@@ -458,7 +582,7 @@ const styles = StyleSheet.create({
   badgePro: { backgroundColor: "#eef2ff" },
   badgeText: { fontSize: 12, fontWeight: "600" },
   badgeTextFree: { color: "#64748b" },
-  badgeTextPro: { color: Colors.primary },
+  badgeTextPro: {},
 
   // ── Progress Bar ──
   progressContainer: {
@@ -473,21 +597,8 @@ const styles = StyleSheet.create({
   },
   progressFill: {
     height: "100%",
-    backgroundColor: Colors.primary,
+    backgroundColor: "#7C3AED",
     borderRadius: 3,
-  },
-
-  // ── API Key Input ──
-  apiKeyInput: {
-    marginTop: 8,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
-    color: "#0f172a",
-    backgroundColor: "#fafafa",
   },
 
   // ── Toggle Group ──
@@ -516,7 +627,118 @@ const styles = StyleSheet.create({
     color: "#64748b",
   },
   toggleTextActive: {
-    color: Colors.primary,
+    color: "#7C3AED",
     fontWeight: "600",
+  },
+
+  // ── Management Modal ──
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: "60%",
+    paddingBottom: 32,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+  },
+  modalTitle: { fontSize: 17, fontWeight: "600" },
+  modalClose: { fontSize: 16, fontWeight: "500" },
+  manageRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    gap: 8,
+  },
+  manageName: { fontSize: 15, fontWeight: "500", flex: 1 },
+  manageInput: {
+    flex: 1,
+    fontSize: 15,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  manageSaveBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  manageCancelBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  manageEditBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  manageDeleteBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  colorDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+  manageEmpty: {
+    textAlign: "center",
+    paddingVertical: 32,
+    fontSize: 14,
+  },
+
+  // ── Plan Cards ──
+  planCard: {
+    width: 200,
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginRight: 12,
+    marginBottom: 8,
+    position: "relative",
+  },
+  planName: {
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  planPrice: {
+    fontSize: 22,
+    fontWeight: "700",
+    marginTop: 4,
+  },
+  planMinutes: {
+    fontSize: 12,
+    fontWeight: "500",
+    marginTop: 2,
+  },
+  planFeature: {
+    fontSize: 12,
+    fontWeight: "500",
+    flex: 1,
+  },
+  planBadge: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
   },
 });

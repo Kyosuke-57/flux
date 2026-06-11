@@ -1,12 +1,11 @@
 /**
- * Expo → R2 アップロードサービス
+ * Expo → R2 アップロードサービス（サーバープロキシ方式）
  *
- * 1. otoroku-api から署名付きURLを取得
- * 2. 音声ファイルを R2 に直接 PUT
+ * multipart/form-data でバイナリ直接送信。Base64エンコードを避けることで
+ * 大ファイルのアップロードを高速化し、Cloudflare Tunnel のタイムアウト(524)を防止。
  */
 import { supabase } from "../lib/supabase";
 
-// 開発中はローカル、本番は otoroku-api のデプロイ先URL
 const API_BASE_URL =
   process.env.EXPO_PUBLIC_OTOROKU_API_URL ?? "http://localhost:3000";
 
@@ -15,15 +14,19 @@ export interface UploadResult {
 }
 
 /**
- * R2 署名付きURLを取得 → 音声ファイルをアップロード
+ * 音声ファイルを API サーバー経由で R2 にアップロード
+ *
+ * @param onProgress 0-100 の進捗率を受け取るコールバック
  */
-export async function uploadToR2(params: {
-  uri: string;
-  filename: string;
-  mimeType: string;
-  fileSize: number;
-}): Promise<UploadResult> {
-  // 1. JWT を取得
+export async function uploadToR2(
+  params: {
+    uri: string;
+    filename: string;
+    mimeType: string;
+    fileSize: number;
+  },
+  onProgress?: (progress: number) => void,
+): Promise<UploadResult> {
   const {
     data: { session },
   } = await supabase.auth.getSession();
@@ -32,42 +35,61 @@ export async function uploadToR2(params: {
     throw new Error("認証されていません。ログインしてください。");
   }
 
-  // 2. 署名付きURLをリクエスト
-  const urlRes = await fetch(`${API_BASE_URL}/api/otoroku-upload-url`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      filename: params.filename,
-      mimeType: params.mimeType,
-      fileSize: params.fileSize,
-    }),
+  // multipart/form-data でファイルを送信（Base64エンコード不要）
+  const formData = new FormData();
+
+  if (params.uri.startsWith("blob:") || params.uri.startsWith("data:")) {
+    const response = await fetch(params.uri);
+    const blob = await response.blob();
+    const file = new File([blob], params.filename, { type: params.mimeType });
+    formData.append("audio", file);
+  } else {
+    formData.append("audio", {
+      uri: params.uri,
+      type: params.mimeType,
+      name: params.filename,
+    } as any);
+  }
+
+  formData.append("filename", params.filename);
+
+  const result = await new Promise<UploadResult>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+
+    xhr.upload.onprogress = (e: ProgressEvent) => {
+      if (onProgress && e.lengthComputable) {
+        const pct = Math.round((e.loaded / e.total) * 100);
+        onProgress(pct);
+      }
+    };
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const data = JSON.parse(xhr.responseText);
+          if (!data.r2Key) {
+            reject(new Error("R2 アップロードのレスポンスが不正です"));
+            return;
+          }
+          onProgress?.(100);
+          resolve({ r2Key: data.r2Key });
+        } catch {
+          reject(new Error("レスポンスの解析に失敗しました"));
+        }
+      } else {
+        const body = xhr.responseText || "(レスポンス読み取り不可)";
+        reject(new Error(`R2 アップロードに失敗しました: ${xhr.status} — ${body}`));
+      }
+    };
+
+    xhr.onerror = () => reject(new Error("ネットワークエラーが発生しました"));
+    xhr.ontimeout = () => reject(new Error("アップロードがタイムアウトしました"));
+
+    xhr.open("POST", `${API_BASE_URL}/api/otoroku-upload-stream`);
+    xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    // Content-Type は自動設定（multipart/form-data; boundary=...）
+    xhr.send(formData as any);
   });
 
-  if (!urlRes.ok) {
-    const err = await urlRes.text().catch(() => "");
-    throw new Error(`アップロードURLの取得に失敗しました: ${urlRes.status} ${err}`);
-  }
-
-  const { uploadUrl, r2Key } = await urlRes.json();
-  if (!uploadUrl || !r2Key) {
-    throw new Error("アップロードURLのレスポンスが不正です");
-  }
-
-  // 3. R2 に直接アップロード
-  const uploadRes = await fetch(uploadUrl, {
-    method: "PUT",
-    headers: {
-      "Content-Type": params.mimeType,
-    },
-    body: await fetch(params.uri).then((r) => r.blob()),
-  });
-
-  if (!uploadRes.ok) {
-    throw new Error(`R2 アップロードに失敗しました: ${uploadRes.status}`);
-  }
-
-  return { r2Key };
+  return result;
 }

@@ -1,60 +1,40 @@
-import { Audio } from "expo-av";
+/**
+ * Recording service — expo-audio ベースの録音機能（ネイティブ用）
+ */
+import { AudioModule, RecordingPresets, setAudioModeAsync } from "expo-audio";
 import * as DocumentPicker from "expo-document-picker";
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-/** The current state of the recording lifecycle. */
-export type RecordingState = "idle" | "recording" | "paused";
-
-/** Result returned by `stopRecording()`. */
-export interface RecordingResult {
-  uri: string;
-  durationMs: number;
-}
-
-// ---------------------------------------------------------------------------
-// Internal state
-// ---------------------------------------------------------------------------
-
-let _recording: Audio.Recording | null = null;
-let _state: RecordingState = "idle";
-
-// ---------------------------------------------------------------------------
-// Permission helpers
-// ---------------------------------------------------------------------------
+import type { RecordingState, RecordingResult } from "./recording-types";
+export type { RecordingState, RecordingResult };
 
 /**
- * Request microphone permission (idempotent on iOS, always prompts on Android).
- * Returns `true` if granted, `false` otherwise.
+ * 録音オプション
+ * prepareToRecordAsync() に渡すことで createRecordingOptions による
+ * プラットフォーム固有設定のフラット化が行われ、高音質で録音される
  */
+const RECORDING_OPTIONS = {
+  ...RecordingPresets.HIGH_QUALITY,
+  bitRate: 192000,
+  isMeteringEnabled: true,
+  android: {
+    ...RecordingPresets.HIGH_QUALITY.android,
+    audioSource: "mic" as const,
+  },
+};
+
+type AudioRecorderInstance = InstanceType<typeof AudioModule.AudioRecorder>;
+let _recorder: AudioRecorderInstance | null = null;
+let _state: RecordingState = "idle";
+
 async function ensurePermissions(): Promise<boolean> {
-  const { granted } = await Audio.requestPermissionsAsync();
+  const { granted } = await AudioModule.requestRecordingPermissionsAsync();
   return granted;
 }
 
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
-
-/**
- * Start recording audio.
- *
- * Requests microphone permission and configures the audio mode before
- * creating and starting the recording.
- *
- * @param options - Optional `RecordingOptions` (defaults to `HIGH_QUALITY`).
- * @throws If permissions are denied or recording fails to start.
- */
-export async function startRecording(
-  options?: Audio.RecordingOptions,
-): Promise<void> {
+export async function startRecording(): Promise<void> {
   if (_state === "recording") {
     console.warn("[recording] Already recording — ignoring startRecording()");
     return;
   }
-
   if (_state === "paused") {
     console.warn("[recording] Recording is paused — call resumeRecording() instead");
     return;
@@ -62,51 +42,38 @@ export async function startRecording(
 
   const hasPermission = await ensurePermissions();
   if (!hasPermission) {
-    throw new Error(
-      "Microphone permission was denied. Cannot start recording.",
-    );
+    throw new Error("Microphone permission was denied. Cannot start recording.");
   }
 
-  // Configure audio mode for recording
-  await Audio.setAudioModeAsync({
-    allowsRecordingIOS: true,
-    playsInSilentModeIOS: true,
+  await setAudioModeAsync({
+    playsInSilentMode: true,
+    allowsRecording: true,
   });
 
-  // Create and prepare the recording
-  _recording = new Audio.Recording();
-  await _recording.prepareToRecordAsync(
-    options ?? Audio.RecordingOptionsPresets.HIGH_QUALITY,
-  );
-  await _recording.startAsync();
-
+  const AudioRecorderCtor = AudioModule.AudioRecorder!;
+  _recorder = new AudioRecorderCtor(RECORDING_OPTIONS);
+  // prepareToRecordAsync にオプションを渡すことで
+  // expo-audio の createRecordingOptions が iOS/Android 設定をフラット化する
+  await _recorder.prepareToRecordAsync(RECORDING_OPTIONS);
+  _recorder.record();
   _state = "recording";
 }
 
-/**
- * Stop the current recording and unload it from memory.
- *
- * @returns `{ uri, durationMs }` describing the finished recording.
- * @throws If no recording is in progress.
- */
 export async function stopRecording(): Promise<RecordingResult> {
-  if (!_recording) {
+  if (!_recorder) {
     throw new Error("No recording in progress. Call startRecording() first.");
   }
 
-  const statusBefore = await _recording.getStatusAsync();
-  const durationMs = statusBefore.durationMillis;
+  const durationMs = Math.round(_recorder.currentTime * 1000);
+  await _recorder.stop();
+  const uri = _recorder.uri;
 
-  await _recording.stopAndUnloadAsync();
-  const uri = _recording.getURI();
-
-  _recording = null;
+  _recorder = null;
   _state = "idle";
 
-  // Reset audio mode so playback routes back to the speaker
-  await Audio.setAudioModeAsync({
-    allowsRecordingIOS: false,
-    playsInSilentModeIOS: false,
+  await setAudioModeAsync({
+    playsInSilentMode: false,
+    allowsRecording: false,
   });
 
   if (!uri) {
@@ -116,90 +83,79 @@ export async function stopRecording(): Promise<RecordingResult> {
   return { uri, durationMs };
 }
 
-/**
- * Pause the current recording.
- *
- * @throws If not currently recording.
- */
 export async function pauseRecording(): Promise<void> {
-  if (!_recording || _state !== "recording") {
+  if (!_recorder || _state !== "recording") {
     throw new Error("Cannot pause — no active recording.");
   }
-
-  await _recording.pauseAsync();
+  _recorder.pause();
   _state = "paused";
 }
 
-/**
- * Resume a paused recording.
- *
- * @throws If the recording is not in the paused state.
- */
 export async function resumeRecording(): Promise<void> {
-  if (!_recording || _state !== "paused") {
+  if (!_recorder || _state !== "paused") {
     throw new Error("Cannot resume — recording is not paused.");
   }
-
-  // `startAsync()` resumes a paused recording in expo-av
-  await _recording.startAsync();
+  _recorder.record();
   _state = "recording";
 }
 
-/**
- * Get the current recording status.
- *
- * @returns The `RecordingStatus` from expo-av, or `null` if no recording
- *          has been prepared.
- */
-export async function getRecordingStatus(): Promise<Audio.RecordingStatus | null> {
-  if (!_recording) {
-    return null;
-  }
-
-  return await _recording.getStatusAsync();
+export async function getRecordingStatus() {
+  if (!_recorder) return null;
+  return _recorder.getStatus();
 }
 
 /**
- * Pick an audio file from the device using the system document picker.
- *
- * @returns The picked file's URI and metadata, or `null` if the user cancelled.
+ * 録音中の音量メータリングをポーリングで取得
+ * @param callback 音量レベル（dB）を受け取るコールバック。録音中は定期的に呼ばれる
+ * @param intervalMs ポーリング間隔（ms）
+ * @returns 購読解除関数
  */
+export function startMeteringPolling(
+  callback: (metering: number) => void,
+  intervalMs: number = 100,
+): () => void {
+  const timer = setInterval(async () => {
+    if (!_recorder) return;
+    try {
+      const status = await _recorder.getStatus();
+      if (status && typeof status.metering === "number") {
+        callback(status.metering);
+      }
+    } catch {
+      // ポーリングエラーは無視
+    }
+  }, intervalMs);
+
+  return () => clearInterval(timer);
+}
+
 export async function importAudio(): Promise<DocumentPicker.DocumentPickerResult | null> {
   const result = await DocumentPicker.getDocumentAsync({
     type: "audio/*",
     copyToCacheDirectory: true,
   });
-
-  if (result.canceled) {
-    return null;
-  }
-
+  if (result.canceled) return null;
   return result;
 }
 
-/**
- * Read the duration (in milliseconds) of an audio file.
- *
- * Loads the file into a temporary `Audio.Sound` instance to read its
- * metadata, then immediately unloads it.
- *
- * @param uri - Local file URI of the audio file.
- * @returns The duration in milliseconds.
- * @throws If the file cannot be loaded or has no duration info.
- */
 export async function getDuration(uri: string): Promise<number> {
-  const { sound, status } = await Audio.Sound.createAsync(
-    { uri },
-    { shouldPlay: false },
-  );
-
-  let durationMs = 0;
-
-  if (status.isLoaded && status.durationMillis != null) {
-    durationMs = status.durationMillis;
+  const { createAudioPlayer } = await import("expo-audio");
+  const player = createAudioPlayer({ uri });
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const timer = setInterval(() => {
+        if (player.isLoaded) {
+          clearInterval(timer);
+          resolve();
+        }
+      }, 50);
+      setTimeout(() => {
+        clearInterval(timer);
+        reject(new Error("Timeout loading audio"));
+      }, 10000);
+    });
+    return Math.round(player.duration * 1000);
+  } finally {
+    player.remove();
   }
-
-  await sound.unloadAsync();
-
-  return durationMs;
 }

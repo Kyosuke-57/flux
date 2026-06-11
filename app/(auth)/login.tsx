@@ -11,11 +11,19 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import { signIn, signUp, signInWithGoogle } from "../../src/services/auth";
 import { useAuth } from "../../src/contexts/AuthContext";
-import { Colors, Spacing, BorderRadius, Shadows } from "../../src/theme";
+import { Spacing, BorderRadius, Shadows, theme } from "../../src/theme";
+import { useHaptics, useBounce, FadeInView } from "../../src/animations";
+import { useSettings } from "../../src/contexts/SettingsContext";
 
 export default function LoginScreen() {
+  const { settings } = useSettings();
+  const c = theme(settings.isDarkMode);
+  const haptics = useHaptics();
+  const submitBtn = useBounce({ scaleIn: 0.95 });
+  const googleBtn = useBounce({ scaleIn: 0.95 });
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLogin, setIsLogin] = useState(true);
@@ -23,7 +31,6 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const { user } = useAuth();
 
-  // If user already has a session, redirect to main app
   useEffect(() => {
     if (user) {
       router.replace("/(tabs)");
@@ -61,7 +68,6 @@ export default function LoginScreen() {
       if (authError) {
         setError(authError.message);
       }
-      // On success, OAuth redirect handles navigation via deep link
     } catch (err: any) {
       setError(err?.message || "予期しないエラーが発生しました");
     } finally {
@@ -70,32 +76,34 @@ export default function LoginScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: c.background }]}>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.inner}
       >
-        <View style={styles.header}>
-          <Text style={styles.logo}>📝</Text>
-          <Text style={styles.title}>OTOROKU</Text>
-          <Text style={styles.subtitle}>
+        <FadeInView delay={0} style={styles.header}>
+          <View style={[styles.logoCircle, { backgroundColor: c.primaryBg }]}>
+            <Ionicons name="mic" size={28} color={c.primary} />
+          </View>
+          <Text style={[styles.title, { color: c.textPrimary }]}>OTOROKU</Text>
+          <Text style={[styles.subtitle, { color: c.textSecondary }]}>
             {isLogin
               ? "おかえりなさい！アカウントにサインイン"
               : "アカウントを作成して始めましょう"}
           </Text>
-        </View>
+        </FadeInView>
 
-        <View style={styles.card}>
+        <FadeInView delay={150} style={[styles.card, { backgroundColor: c.surface, borderColor: c.cardBorder }]}>
           {error ? (
-            <View style={styles.errorContainer}>
-              <Text style={styles.errorText}>{error}</Text>
+            <View style={[styles.errorContainer, { backgroundColor: c.errorBg, borderColor: c.error }]}>
+              <Text style={[styles.errorText, { color: c.error }]}>{error}</Text>
             </View>
           ) : null}
 
           <TextInput
-            style={styles.input}
+            style={[styles.input, { backgroundColor: c.inputBg, borderColor: c.border, color: c.textPrimary }]}
             placeholder="メールアドレス"
-            placeholderTextColor="#94a3b8"
+            placeholderTextColor={c.textMuted}
             value={email}
             onChangeText={setEmail}
             autoCapitalize="none"
@@ -104,9 +112,9 @@ export default function LoginScreen() {
             editable={!loading}
           />
           <TextInput
-            style={styles.input}
+            style={[styles.input, { backgroundColor: c.inputBg, borderColor: c.border, color: c.textPrimary }]}
             placeholder="パスワード"
-            placeholderTextColor="#94a3b8"
+            placeholderTextColor={c.textMuted}
             value={password}
             onChangeText={setPassword}
             secureTextEntry
@@ -115,31 +123,36 @@ export default function LoginScreen() {
           />
 
           <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={handleSubmit}
+            style={[styles.button, { backgroundColor: c.primary }, loading && styles.buttonDisabled]}
+            onPress={() => { haptics.mediumTap(); handleSubmit(); }}
+            onPressIn={submitBtn.onPressIn}
+            onPressOut={submitBtn.onPressOut}
             disabled={loading}
           >
             {loading ? (
               <ActivityIndicator color="#fff" size="small" />
             ) : (
-              <Text style={styles.buttonText}>
+              <Text style={[styles.buttonText, { color: c.textInverse }]}>
                 {isLogin ? "サインイン" : "新規登録"}
               </Text>
             )}
           </TouchableOpacity>
 
           <View style={styles.divider}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>または</Text>
-            <View style={styles.dividerLine} />
+            <View style={[styles.dividerLine, { backgroundColor: c.border }]} />
+            <Text style={[styles.dividerText, { color: c.textMuted }]}>または</Text>
+            <View style={[styles.dividerLine, { backgroundColor: c.border }]} />
           </View>
 
           <TouchableOpacity
-            style={[styles.googleButton, loading && styles.buttonDisabled]}
-            onPress={handleGoogleSignIn}
+            style={[styles.googleButton, { backgroundColor: c.surface, borderColor: c.border }, loading && styles.buttonDisabled]}
+            onPress={() => { haptics.mediumTap(); handleGoogleSignIn(); }}
+            onPressIn={googleBtn.onPressIn}
+            onPressOut={googleBtn.onPressOut}
             disabled={loading}
           >
-            <Text style={styles.googleText}>Googleで続ける</Text>
+            <Ionicons name="logo-google" size={18} color={c.textSecondary} />
+            <Text style={[styles.googleText, { color: c.textPrimary }]}>Googleで続ける</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -149,13 +162,13 @@ export default function LoginScreen() {
             }}
             disabled={loading}
           >
-            <Text style={styles.switchText}>
+            <Text style={[styles.switchText, { color: c.primary }]}>
               {isLogin
                 ? "アカウントをお持ちでない方は新規登録"
                 : "すでにアカウントをお持ちの方はサインイン"}
             </Text>
           </TouchableOpacity>
-        </View>
+        </FadeInView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -164,7 +177,6 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
   },
   inner: {
     flex: 1,
@@ -175,60 +187,49 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 40,
   },
-  logo: {
-    fontSize: 48,
-    marginBottom: 12,
+  logoCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 16,
   },
   title: {
     fontSize: 28,
     fontWeight: "700",
-    color: "#0f172a",
   },
   subtitle: {
     fontSize: 15,
-    color: "#64748b",
     marginTop: 8,
     textAlign: "center",
     lineHeight: 22,
     paddingHorizontal: 16,
   },
   card: {
-    backgroundColor: "#fff",
     borderRadius: 16,
     padding: 24,
     gap: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    elevation: 3,
     borderWidth: 1,
-    borderColor: "#f1f5f9",
+    ...Shadows.md,
   },
   errorContainer: {
-    backgroundColor: "#fef2f2",
     borderRadius: 10,
     padding: 12,
     borderWidth: 1,
-    borderColor: "#fecaca",
   },
   errorText: {
-    color: "#dc2626",
     fontSize: 14,
     textAlign: "center",
   },
   input: {
-    backgroundColor: "#f8fafc",
     borderWidth: 1,
-    borderColor: "#e2e8f0",
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 15,
-    color: "#0f172a",
   },
   button: {
-    backgroundColor: Colors.primary,
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: "center",
@@ -238,7 +239,6 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   buttonText: {
-    color: "#fff",
     fontSize: 16,
     fontWeight: "600",
   },
@@ -251,30 +251,24 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: "#e2e8f0",
   },
   dividerText: {
     fontSize: 13,
-    color: "#94a3b8",
   },
   googleButton: {
-    backgroundColor: "#fff",
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "#e2e8f0",
     flexDirection: "row",
     gap: 8,
   },
   googleText: {
-    color: "#0f172a",
     fontSize: 15,
     fontWeight: "500",
   },
   switchText: {
-    color: Colors.primary,
     textAlign: "center",
     marginTop: 16,
     fontSize: 14,

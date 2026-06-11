@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -10,36 +10,96 @@ import {
   ActivityIndicator,
   Modal,
   FlatList,
+  BackHandler,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import { Paths, File } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import { getMinute, createMinute, updateMinute, deleteMinute } from "../../src/services/minutes";
 import { getAllTemplates } from "../../src/services/templates";
-import { getAllTags } from "../../src/services/tags";
-import type { Minute, Template, Tag } from "../../src/types";
-import { Colors } from "../../src/theme";
+import { getAllTags, createTag } from "../../src/services/tags";
+import { getAllFolders } from "../../src/services/folders";
+import type { Minute, Template, Tag, Folder } from "../../src/types";
+import { Spacing, BorderRadius, theme } from "../../src/theme";
+import { useSettings } from "../../src/contexts/SettingsContext";
+import { useToast } from "../../src/contexts/ToastContext";
+import { Skeleton } from "../../src/components/Skeleton";
+import { ActionSheet, type ActionSheetOption } from "../../src/components/ActionSheet";
+import { INDUSTRY_TEMPLATES } from "../../src/data/industry-templates";
 
 export default function MinuteDetailScreen() {
-  const { id, recordingUri } = useLocalSearchParams<{
+  const { settings } = useSettings();
+  const c = theme(settings.isDarkMode);
+  const { id, recordingUri, recordingPath } = useLocalSearchParams<{
     id: string;
     recordingUri?: string;
+    recordingPath?: string;
   }>();
   const isNew = !id || id === "new" || id === "create";
 
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+  const [originalTranscript, setOriginalTranscript] = useState("");
+  const [correctedTranscript, setCorrectedTranscript] = useState("");
   const [tagsStr, setTagsStr] = useState("");
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [availableTags, setAvailableTags] = useState<Tag[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
+  const [folders, setFolders] = useState<Folder[]>([]);
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [templateModalVisible, setTemplateModalVisible] = useState(false);
+  const [folderModalVisible, setFolderModalVisible] = useState(false);
+  const [tagCreateModalVisible, setTagCreateModalVisible] = useState(false);
+  const [newTagName, setNewTagName] = useState("");
   const [transcribing, setTranscribing] = useState(false);
-  const [hasRecording] = useState(!!recordingUri);
+  const [recordingPathState, setRecordingPathState] = useState<string | null>(recordingPath ?? null);
+  const [shareModalVisible, setShareModalVisible] = useState(false);
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const contentInputRef = useRef<TextInput>(null);
+  const [selection, setSelection] = useState<{ start: number; end: number }>({ start: 0, end: 0 });
+  const templateContentRef = useRef<string | null>(null);
+  const toast = useToast();
+  const initialSnapshot = useRef<{
+    title: string;
+    content: string;
+    correctedTranscript: string;
+    tagsStr: string;
+    folderId: string | null;
+  } | null>(null);
 
-  // Fetch existing minute + tags + templates on mount
+  const hasUnsavedChanges = useCallback(() => {
+    if (!initialSnapshot.current) return false;
+    return (
+      title !== initialSnapshot.current.title ||
+      content !== initialSnapshot.current.content ||
+      correctedTranscript !== initialSnapshot.current.correctedTranscript ||
+      tagsStr !== initialSnapshot.current.tagsStr ||
+      selectedFolderId !== initialSnapshot.current.folderId
+    );
+  }, [title, content, correctedTranscript, tagsStr, selectedFolderId]);
+
+  const confirmBack = useCallback(() => {
+    if (hasUnsavedChanges()) {
+      Alert.alert(
+        "変更を保存していません",
+        "保存せずに戻りますか？",
+        [
+          { text: "キャンセル", style: "cancel" },
+          {
+            text: "保存せずに戻る",
+            style: "destructive",
+            onPress: () => router.back(),
+          },
+        ],
+      );
+    } else {
+      router.back();
+    }
+  }, [hasUnsavedChanges]);
+
   const fetchData = useCallback(async () => {
     if (!isNew && id) {
       const { data: minute, error } = await getMinute(id);
@@ -51,17 +111,31 @@ export default function MinuteDetailScreen() {
       if (minute) {
         setTitle(minute.title);
         setContent(minute.content);
+        setOriginalTranscript(minute.original_transcript ?? "");
+        setCorrectedTranscript(minute.corrected_transcript ?? "");
         setTagsStr((minute.tags ?? []).join(", "));
+        setSelectedFolderId(minute.folder_id ?? null);
+        if (minute.recording_path) setRecordingPathState(minute.recording_path);
+        initialSnapshot.current = {
+          title: minute.title,
+          content: minute.content,
+          correctedTranscript: minute.corrected_transcript ?? "",
+          tagsStr: (minute.tags ?? []).join(", "),
+          folderId: minute.folder_id ?? null,
+        };
       }
+    } else {
+      initialSnapshot.current = { title: "", content: "", correctedTranscript: "", tagsStr: "", folderId: null };
     }
 
-    // Load tags and templates for suggestions
-    const [tagsResult, templatesResult] = await Promise.all([
+    const [tagsResult, templatesResult, foldersResult] = await Promise.all([
       getAllTags(),
       getAllTemplates(),
+      getAllFolders(),
     ]);
     if (tagsResult.data) setAvailableTags(tagsResult.data);
     if (templatesResult.data) setTemplates(templatesResult.data);
+    if (foldersResult.data) setFolders(foldersResult.data);
 
     setLoading(false);
   }, [isNew, id]);
@@ -70,37 +144,67 @@ export default function MinuteDetailScreen() {
     fetchData();
   }, [fetchData]);
 
-  // Start transcription for new minutes with a recording
+  useEffect(() => {
+    const onBackPress = () => {
+      if (hasUnsavedChanges()) {
+        Alert.alert(
+          "変更を保存していません",
+          "保存せずに戻りますか？",
+          [
+            { text: "キャンセル", style: "cancel" },
+            { text: "保存せずに戻る", style: "destructive", onPress: () => router.back() },
+          ],
+        );
+        return true;
+      }
+      return false;
+    };
+    const subscription = BackHandler.addEventListener("hardwareBackPress", onBackPress);
+    return () => subscription.remove();
+  }, [hasUnsavedChanges]);
+
+  useEffect(() => {
+    if (isNew || !id) return;
+    const autoSave = setInterval(async () => {
+      if (!hasUnsavedChanges()) return;
+      const tagsArray = tagsStr.split(",").map((t) => t.trim()).filter(Boolean);
+      await updateMinute(id, {
+        title: title || generateTitleFromContent(content || correctedTranscript || originalTranscript),
+        content,
+        tags: tagsArray,
+        folder_id: selectedFolderId ?? undefined,
+        original_transcript: originalTranscript || undefined,
+        corrected_transcript: correctedTranscript || undefined,
+      } as any);
+      if (initialSnapshot.current) {
+        initialSnapshot.current = {
+          title: title || initialSnapshot.current.title,
+          content,
+          correctedTranscript,
+          tagsStr,
+          folderId: selectedFolderId,
+        };
+      }
+    }, 30000);
+    return () => clearInterval(autoSave);
+  }, [isNew, id, title, content, tagsStr, selectedFolderId, originalTranscript, correctedTranscript, hasUnsavedChanges]);
+
+  const generateTitleFromContent = useCallback((text: string) => {
+    const cleaned = text.replace(/[#*`\[\]\n]/g, " ").trim();
+    const match = cleaned.match(/^(.{1,50}?[。\.\?\!]\s)/);
+    if (match) return match[1].trim();
+    const firstLine = cleaned.split(/\n/)[0]?.trim();
+    if (firstLine && firstLine.length <= 60) return firstLine;
+    return cleaned.slice(0, 45).trim() + "…";
+  }, []);
+
   const handleTranscribe = useCallback(async () => {
-    if (!recordingUri) return;
+    const uri = recordingPathState || recordingPath || recordingUri;
+    if (!uri) return;
     setTranscribing(true);
     try {
-      // Use the recording pipeline: upload → transcribe
-      const { uploadToR2 } = await import("../../src/services/r2-upload");
-      const { startTranscription } = await import("../../src/services/transcription");
-      const FS = await import("expo-file-system");
-
-      const fileName = `recording_${Date.now()}.m4a`;
-      const mimeType = "audio/mp4";
-      const info = await FS.default.getInfoAsync(recordingUri);
-      const fileSize = "size" in info ? (info.size ?? 0) : 0;
-
-      // 1. Upload to R2
-      const { r2Key } = await uploadToR2({
-        uri: recordingUri,
-        filename: fileName,
-        mimeType,
-        fileSize,
-      });
-
-      // 2. Start transcription
-      const recordingId = crypto.randomUUID?.() ?? `${Date.now()}`;
-      await startTranscription({
-        r2Key,
-        recordingId,
-        fileSize,
-        fileName,
-      });
+      const { pipelineManager } = await import("../../src/services/pipeline-manager");
+      pipelineManager.startPipeline(uri, templateContentRef.current ?? undefined);
 
       setContent((prev) =>
         prev
@@ -112,14 +216,35 @@ export default function MinuteDetailScreen() {
     } finally {
       setTranscribing(false);
     }
-  }, [recordingUri]);
+  }, [recordingUri, recordingPath]);
 
-  // Save — create or update
-  const handleSave = useCallback(async () => {
-    if (!title.trim()) {
-      Alert.alert("エラー", "タイトルは必須です");
+  const handleSave = useCallback(async (skipEmptyCheck?: boolean) => {
+    const hasContent = content.trim() || correctedTranscript.trim() || originalTranscript.trim();
+    if (!skipEmptyCheck && !title.trim() && !hasContent) {
+      Alert.alert(
+        "空の議事録",
+        "タイトルと本文が両方とも空です。このまま保存しますか？",
+        [
+          { text: "キャンセル", style: "cancel" },
+          { text: "保存する", onPress: () => handleSave(true) },
+        ],
+      );
       return;
     }
+    if (!title.trim()) {
+      const autoTitle = generateTitleFromContent(
+        content || correctedTranscript || originalTranscript
+      );
+      if (autoTitle) setTitle(autoTitle);
+    }
+    const finalTitle = title.trim() || generateTitleFromContent(
+      content || correctedTranscript || originalTranscript
+    );
+    if (!finalTitle) {
+      Alert.alert("エラー", "タイトルを入力するか、本文を入力してください");
+      return;
+    }
+
     setSaving(true);
     const tagsArray = tagsStr
       .split(",")
@@ -128,127 +253,243 @@ export default function MinuteDetailScreen() {
 
     let error: any = null;
     if (isNew) {
-      const result = await createMinute(title.trim(), content, tagsArray);
+      const result = await createMinute(
+        finalTitle,
+        content,
+        tagsArray,
+        undefined,
+        selectedFolderId ?? undefined,
+        originalTranscript || undefined,
+        correctedTranscript || undefined,
+        recordingPathState ?? undefined,
+      );
+      if (result.data?.id && recordingPathState) {
+        setRecordingPathState(recordingPathState);
+      }
       error = result.error;
     } else if (id) {
       const result = await updateMinute(id, {
-        title: title.trim(),
+        title: finalTitle,
         content,
         tags: tagsArray,
-      });
+        folder_id: selectedFolderId ?? undefined,
+        original_transcript: originalTranscript || undefined,
+        corrected_transcript: correctedTranscript || undefined,
+        recording_path: recordingPathState ?? undefined,
+      } as any);
       error = result.error;
     }
 
     setSaving(false);
     if (error) {
-      Alert.alert("エラー", "議事録の保存に失敗しました");
+      toast.showToast({ message: "議事録の保存に失敗しました", type: "error" });
       return;
     }
+    toast.showToast({ message: "保存しました", type: "success" });
     router.back();
-  }, [isNew, id, title, content, tagsStr]);
+  }, [isNew, id, title, content, tagsStr, selectedFolderId, originalTranscript, correctedTranscript, recordingPathState, generateTitleFromContent, toast]);
 
-  // Delete existing minute with confirmation
   const handleDelete = useCallback(() => {
     if (!id || isNew) return;
-    Alert.alert(
-      "議事録を削除",
-      "この議事録を削除してもよろしいですか？この操作は元に戻せません。",
-      [
-        { text: "キャンセル", style: "cancel" },
-        {
-          text: "削除",
-          style: "destructive",
-          onPress: async () => {
-            const { error } = await deleteMinute(id);
-            if (error) {
-              Alert.alert("エラー", "議事録の削除に失敗しました");
-              return;
-            }
-            router.back();
-          },
-        },
-      ]
-    );
+    setDeleteModalVisible(true);
   }, [id, isNew]);
 
-  // Export as TXT or MD using expo-sharing
-  const handleExport = useCallback(
-    async (format: "txt" | "md") => {
+  const confirmDelete = useCallback(() => {
+    if (!id) return;
+    setDeleteModalVisible(false);
+    router.back();
+    toast.showToast({
+      message: "削除しました",
+      type: "success",
+      duration: 4000,
+      actionLabel: "取り消し",
+      onAction: () => {},
+      onAutoHide: async () => {
+        const { error } = await deleteMinute(id);
+        if (error) {
+          toast.showToast({ message: "議事録の削除に失敗しました", type: "error" });
+        }
+      },
+    });
+  }, [id, toast]);
+
+  const handleShare = useCallback(
+    async (format: "txt" | "md" | "pdf" | "docx") => {
+      setShareModalVisible(false);
       const isAvailable = await Sharing.isAvailableAsync();
       if (!isAvailable) {
-        Alert.alert("エクスポート不可", "このデバイスでは共有が利用できません。");
+        Alert.alert("共有不可", "このデバイスでは共有が利用できません。");
         return;
       }
 
-      const ext = format === "md" ? "md" : "txt";
-      const data =
-        format === "md"
-          ? `# ${title}\n\n${content}`
-          : `${title}\n\n${content}`;
+      const shareContent = content;
 
-      const fileUri = `${Paths.cache}minute-${Date.now()}.${ext}`;
-      await new File(fileUri).write(data);
+      let fileUri: string;
+      let mimeType: string;
+      let uti: string;
 
-      await Sharing.shareAsync(fileUri, {
-        mimeType: format === "md" ? "text/markdown" : "text/plain",
-        dialogTitle: "議事録をエクスポート",
-        UTI: format === "md" ? "net.daringfireball.markdown" : "public.plain-text",
-      });
+      if (format === "pdf") {
+        const { Print } = await import("expo-print");
+        const html = `
+          <html>
+          <head><meta charset="utf-8"><style>
+            body { font-family: sans-serif; padding: 24px; line-height: 1.7; color: #333; }
+            h1 { font-size: 24px; border-bottom: 2px solid #7C3AED; padding-bottom: 8px; }
+            p { margin: 8px 0; }
+          </style></head>
+          <body>
+            <h1>${title}</h1>
+            ${shareContent.split("\n").map((line) => {
+              if (line.startsWith("# ")) return `<h1>${line.slice(2)}</h1>`;
+              if (line.startsWith("## ")) return `<h2>${line.slice(3)}</h2>`;
+              if (line.startsWith("### ")) return `<h3>${line.slice(4)}</h3>`;
+              return `<p>${line}</p>`;
+            }).join("\n")}
+          </body>
+          </html>
+        `;
+        const { uri } = await Print.printToFileAsync({ html });
+        fileUri = uri;
+        mimeType = "application/pdf";
+        uti = "com.adobe.pdf";
+      } else if (format === "docx") {
+        const html = `
+          <html>
+          <head><meta charset="utf-8"></head>
+          <body>
+            <h1>${title}</h1>
+            ${shareContent.split("\n").map((line) => `<p>${line}</p>`).join("\n")}
+          </body>
+          </html>
+        `;
+        const file = new File(Paths.cache, `minute-${Date.now()}.docx`);
+        file.write(html);
+        fileUri = file.uri;
+        mimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+        uti = "org.openxmlformats.wordprocessingml.document";
+      } else {
+        const ext = format;
+        const data = format === "md"
+          ? `# ${title}\n\n${shareContent}`
+          : `${title}\n\n${shareContent}`;
+        const file = new File(Paths.cache, `minute-${Date.now()}.${ext}`);
+        file.write(data);
+        fileUri = file.uri;
+        mimeType = format === "md" ? "text/markdown" : "text/plain";
+        uti = format === "md" ? "net.daringfireball.markdown" : "public.plain-text";
+      }
+
+      await Sharing.shareAsync(fileUri, { mimeType, dialogTitle: "議事録を共有", UTI: uti });
     },
     [title, content]
   );
 
-  // Apply a template — sets the content and optionally the title
-  const handleApplyTemplate = useCallback((template: Template) => {
+  const handleSharePress = useCallback(() => {
+    setShareModalVisible(true);
+  }, []);
+
+  const doApplyTemplate = useCallback((template: { name: string; content: string }) => {
+    templateContentRef.current = template.content;
     setContent(template.content);
     if (!title.trim()) {
-      // Derive a default title from the template name
       setTitle(`会議 — ${template.name}`);
     }
     setTemplateModalVisible(false);
   }, [title]);
 
-  // Add a tag chip to the tags string
-  const handleAddTag = useCallback((tagName: string) => {
+  const handleApplyTemplate = useCallback((template: { name: string; content: string }) => {
+    const preview = template.content.replace(/[#*`\[\]]/g, "").trim();
+    const snippet = preview.length > 150 ? preview.slice(0, 150) + "…" : preview;
+    Alert.alert(
+      `テンプレート「${template.name}」を適用`,
+      `${snippet}\n\n---\nこのテンプレートを議事録に適用しますか？\n現在の内容は上書きされます。`,
+      [
+        { text: "キャンセル", style: "cancel" },
+        {
+          text: "適用する",
+          onPress: () => doApplyTemplate(template),
+        },
+      ],
+    );
+  }, [doApplyTemplate]);
+
+  const handlePreviewTemplate = useCallback((template: { name: string; content: string }) => {
+    Alert.alert(
+      `テンプレート: ${template.name}`,
+      template.content,
+    );
+  }, []);
+
+  const handleToggleTag = useCallback((tagName: string) => {
     const current = tagsStr
       .split(",")
       .map((t) => t.trim())
       .filter(Boolean);
-    if (!current.includes(tagName)) {
+    if (current.includes(tagName)) {
+      setTagsStr(current.filter((t) => t !== tagName).join(", "));
+    } else {
       current.push(tagName);
       setTagsStr(current.join(", "));
     }
   }, [tagsStr]);
+
+  const handleCreateAndAddTag = useCallback(async () => {
+    setNewTagName("");
+    setTagCreateModalVisible(true);
+  }, []);
+
+  const handleConfirmCreateTag = useCallback(async () => {
+    if (!newTagName.trim()) return;
+    const { data } = await createTag(newTagName.trim());
+    if (data) {
+      setAvailableTags((prev) => [...prev, data]);
+      handleToggleTag(data.name);
+    }
+    setTagCreateModalVisible(false);
+    setNewTagName("");
+  }, [newTagName, handleToggleTag]);
+
+  const handleContentChange = (text: string) => {
+    setContent(text);
+  };
 
   const parsedTags = tagsStr
     .split(",")
     .map((t) => t.trim())
     .filter(Boolean);
 
-  // Loading state
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={Colors.primary} />
-          <Text style={styles.loadingText}>議事録を読み込み中…</Text>
+      <SafeAreaView style={[styles.container, { backgroundColor: c.background }]}>
+        <View style={[styles.header, { backgroundColor: c.surface, borderBottomColor: c.divider }]}>
+          <Skeleton width={60} height={20} borderRadius={6} />
+          <Skeleton width={120} height={20} borderRadius={6} />
+          <Skeleton width={50} height={20} borderRadius={6} />
+        </View>
+        <View style={{ paddingHorizontal: 24, paddingTop: 20, gap: 16 }}>
+          <Skeleton width="100%" height={28} borderRadius={8} />
+          <Skeleton width="40%" height={18} borderRadius={6} />
+          <Skeleton width="100%" height={200} borderRadius={12} />
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.headerAction}>戻る</Text>
+    <SafeAreaView style={[styles.container, { backgroundColor: c.background }]}>
+      <View style={[styles.header, { backgroundColor: c.surface, borderBottomColor: c.divider }]}>
+        <TouchableOpacity
+          style={styles.headerBtn}
+          onPress={confirmBack}
+        >
+          <Ionicons name="chevron-back" size={22} color={c.primary} />
+          <Text style={[styles.headerAction, { color: c.primary }]}>戻る</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>
+        <Text style={[styles.headerTitle, { color: c.textPrimary }]}>
           {isNew ? "新規議事録" : "議事録を編集"}
         </Text>
-        <TouchableOpacity onPress={handleSave} disabled={saving}>
-          <Text style={[styles.headerAction, styles.saveBtn, saving && styles.disabled]}>
+        <TouchableOpacity onPress={() => handleSave()} disabled={saving}>
+          <Text style={[styles.headerAction, styles.saveBtn, { color: c.primary }, saving && styles.disabled]}>
             {saving ? "保存中…" : "保存"}
           </Text>
         </TouchableOpacity>
@@ -259,24 +500,47 @@ export default function MinuteDetailScreen() {
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Title */}
         <TextInput
-          style={styles.titleInput}
+          style={[styles.titleInput, { color: c.textPrimary, borderBottomColor: c.divider }]}
           value={title}
           onChangeText={setTitle}
           placeholder="会議のタイトル"
-          placeholderTextColor="#94a3b8"
+          placeholderTextColor={c.textMuted}
         />
 
-        {/* Tags */}
-        <View style={styles.tagsSection}>
-          <TextInput
-            style={styles.tagInput}
-            value={tagsStr}
-            onChangeText={setTagsStr}
-            placeholder="タグ（カンマ区切り）"
-            placeholderTextColor="#94a3b8"
+        <TouchableOpacity
+          style={[styles.folderSelector, { borderBottomColor: c.divider }]}
+          onPress={() => setFolderModalVisible(true)}
+        >
+          <Ionicons
+            name={selectedFolderId ? "folder" : "folder-open-outline"}
+            size={18}
+            color={selectedFolderId ? c.primary : c.textMuted}
           />
+          <Text style={[styles.folderSelectorText, { color: selectedFolderId ? c.textPrimary : c.textMuted }]}>
+            {selectedFolderId
+              ? folders.find((f) => f.id === selectedFolderId)?.name ?? "フォルダ"
+              : "フォルダを選択"}
+          </Text>
+          <Ionicons name="chevron-down" size={16} color={c.textMuted} />
+        </TouchableOpacity>
+
+        <View style={styles.tagsSection}>
+          <View style={styles.tagInputRow}>
+            <TextInput
+              style={[styles.tagInput, { color: c.primary, borderBottomColor: c.divider }]}
+              value={tagsStr}
+              onChangeText={setTagsStr}
+              placeholder="タグ（カンマ区切り）"
+              placeholderTextColor={c.textMuted}
+            />
+            <TouchableOpacity
+              style={[styles.addTagBtn, { backgroundColor: c.primaryBg }]}
+              onPress={handleCreateAndAddTag}
+            >
+              <Ionicons name="add" size={18} color={c.primary} />
+            </TouchableOpacity>
+          </View>
           {availableTags.length > 0 && (
             <View style={styles.tagSuggestions}>
               {availableTags.map((tag) => {
@@ -286,14 +550,16 @@ export default function MinuteDetailScreen() {
                     key={tag.id}
                     style={[
                       styles.tagChip,
-                      isSelected && styles.tagChipSelected,
+                      { backgroundColor: c.surfaceSecondary },
+                      isSelected && { backgroundColor: c.primary },
                     ]}
-                    onPress={() => handleAddTag(tag.name)}
+                    onPress={() => handleToggleTag(tag.name)}
                   >
                     <Text
                       style={[
                         styles.tagChipText,
-                        isSelected && styles.tagChipTextSelected,
+                        { color: c.textSecondary },
+                        isSelected && { color: c.textInverse, fontWeight: "600" },
                       ]}
                     >
                       {tag.name}
@@ -305,170 +571,342 @@ export default function MinuteDetailScreen() {
           )}
         </View>
 
-        {/* Transcribe button — only for new minutes with a recording */}
-        {isNew && hasRecording && (
+        {recordingPathState && (
           <View style={styles.transcribeSection}>
-            {transcribing ? (
-              <View style={styles.transcribingRow}>
-                <ActivityIndicator size="small" color={Colors.primary} />
-                <Text style={styles.transcribingText}>文字起こし中…</Text>
-              </View>
-            ) : (
-              <TouchableOpacity style={styles.transcribeBtn} onPress={handleTranscribe}>
-                <Text style={styles.transcribeBtnText}>🎙 録音を文字起こし</Text>
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              <TouchableOpacity
+                style={[styles.transcribeBtn, { backgroundColor: c.surfaceSecondary }]}
+                onPress={async () => {
+                  const { AudioModule } = await import("expo-audio");
+                  const player = AudioModule.createAudioPlayer({ uri: recordingPathState });
+                  player.play();
+                }}
+              >
+                <Ionicons name="play-outline" size={18} color={c.textPrimary} />
+                <Text style={[styles.transcribeBtnText, { color: c.textPrimary }]}>再生</Text>
               </TouchableOpacity>
-            )}
+              {transcribing ? (
+                <View style={styles.transcribingRow}>
+                  <ActivityIndicator size="small" color={c.primary} />
+                  <Text style={[styles.transcribingText, { color: c.textMuted }]}>文字起こし中…</Text>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.transcribeBtn, { backgroundColor: c.primaryBg }]}
+                  onPress={handleTranscribe}
+                >
+                  <Ionicons name="mic-outline" size={18} color={c.primary} />
+                  <Text style={[styles.transcribeBtnText, { color: c.primary }]}>文字起こし</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
         )}
 
-        {/* Content */}
         <TextInput
-          style={styles.contentInput}
+          ref={contentInputRef}
+          style={[styles.contentInput, { color: c.textPrimary }]}
           value={content}
-          onChangeText={setContent}
-          placeholder="議事録を書き始めましょう…"
-          placeholderTextColor="#94a3b8"
+          onChangeText={handleContentChange}
+          onSelectionChange={(e) => setSelection(e.nativeEvent.selection)}
+          placeholder={"議事録を書き始めましょう…"}
+          placeholderTextColor={c.textMuted}
           multiline
           textAlignVertical="top"
         />
       </ScrollView>
 
-      {/* Bottom action bar */}
-      <View style={styles.bottomBar}>
-        {/* Delete — only for existing minutes */}
+      <View style={[styles.bottomBar, { backgroundColor: c.surface, borderTopColor: c.divider }]}>
         {!isNew && (
-          <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete}>
-            <Text style={styles.deleteBtnText}>削除</Text>
+          <TouchableOpacity
+            style={[styles.deleteBtn, { backgroundColor: c.errorBg }]}
+            onPress={handleDelete}
+          >
+            <Ionicons name="trash-outline" size={16} color={c.error} />
+            <Text style={[styles.deleteBtnText, { color: c.error }]}>削除</Text>
           </TouchableOpacity>
         )}
 
-        <View style={styles.exportRow}>
-          <Text style={styles.exportLabel}>エクスポート:</Text>
-          <TouchableOpacity
-            style={styles.exportBtn}
-            onPress={() => handleExport("txt")}
-          >
-            <Text style={styles.exportBtnText}>.txt</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.exportBtn}
-            onPress={() => handleExport("md")}
-          >
-            <Text style={styles.exportBtnText}>.md</Text>
-          </TouchableOpacity>
-        </View>
-
         <TouchableOpacity
-          style={styles.templateBtn}
+          style={[styles.templateBtn, { backgroundColor: c.primaryBg }]}
           onPress={() => setTemplateModalVisible(true)}
         >
-          <Text style={styles.templateBtnText}>テンプレート</Text>
+          <Ionicons name="document-text-outline" size={14} color={c.primary} />
+          <Text style={[styles.templateBtnText, { color: c.primary }]}>テンプレート</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.shareBtn, { backgroundColor: c.primary }]}
+          onPress={handleSharePress}
+        >
+          <Ionicons name="share-outline" size={16} color="#fff" />
+          <Text style={[styles.shareBtnText, { color: "#fff" }]}>共有</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Template picker modal */}
       <Modal
         visible={templateModalVisible}
         transparent
         animationType="slide"
         onRequestClose={() => setTemplateModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>テンプレートを適用</Text>
+        <View style={[styles.modalOverlay, { backgroundColor: c.overlay }]}>
+          <View style={[styles.modalContent, { backgroundColor: c.surface }]}>
+            <View style={[styles.modalHeader, { borderBottomColor: c.divider }]}>
+              <Text style={[styles.modalTitle, { color: c.textPrimary }]}>テンプレートを適用</Text>
               <TouchableOpacity onPress={() => setTemplateModalVisible(false)}>
-                <Text style={styles.modalClose}>閉じる</Text>
+                <Text style={[styles.modalClose, { color: c.primary }]}>閉じる</Text>
               </TouchableOpacity>
             </View>
 
-            {templates.length === 0 ? (
-              <View style={styles.modalEmpty}>
-                <Text style={styles.modalEmptyText}>
-                  テンプレートがありません。設定で作成してください。
-                </Text>
-              </View>
-            ) : (
-              <FlatList
-                data={templates}
-                keyExtractor={(item) => item.id}
-                contentContainerStyle={styles.templateList}
-                renderItem={({ item }) => (
-                  <TouchableOpacity
-                    style={styles.templateCard}
-                    onPress={() => handleApplyTemplate(item)}
-                  >
-                    <View style={styles.templateCardHeader}>
-                      <Text style={styles.templateCardName}>{item.name}</Text>
-                      {item.is_default && (
-                        <View style={styles.defaultBadge}>
-                          <Text style={styles.defaultBadgeText}>デフォルト</Text>
-                        </View>
-                      )}
-                    </View>
-                    <Text style={styles.templateCardPreview} numberOfLines={3}>
-                      {item.content.replace(/[#*`\\[\\]]/g, "").trim() || "空のテンプレート"}
-                    </Text>
-                  </TouchableOpacity>
-                )}
-              />
-            )}
+            <FlatList
+              contentContainerStyle={styles.templateList}
+              ListHeaderComponent={
+                templates.length > 0 ? (
+                  <Text style={[styles.templateSectionLabel, { color: c.textMuted }]}>マイテンプレート</Text>
+                ) : null
+              }
+              data={[
+                ...templates.map((t) => ({ type: "user" as const, data: t })),
+                ...INDUSTRY_TEMPLATES.map((p) => ({ type: "industry" as const, data: p })),
+              ]}
+              keyExtractor={(item) =>
+                item.type === "user" ? item.data.id : `preset_${item.data.id}`
+              }
+              renderItem={({ item, index }) => {
+                const isFirstIndustry =
+                  item.type === "industry" &&
+                  (index === templates.length || (templates.length === 0 && index === 0));
+                return (
+                  <>
+                    {isFirstIndustry && (
+                      <Text style={[styles.templateSectionLabel, { color: c.textMuted, marginTop: 16 }]}>
+                        業種別テンプレート
+                      </Text>
+                    )}
+                    <TouchableOpacity
+                      style={[styles.templateCard, { backgroundColor: c.background, borderColor: c.cardBorder }]}
+                      onPress={() => {
+                        if (item.type === "user") {
+                          handleApplyTemplate(item.data as Template);
+                        } else {
+                          handleApplyTemplate(item.data as typeof INDUSTRY_TEMPLATES[number]);
+                        }
+                      }}
+                      onLongPress={() => {
+                        if (item.type === "user") {
+                          handlePreviewTemplate(item.data as Template);
+                        } else {
+                          handlePreviewTemplate(item.data as typeof INDUSTRY_TEMPLATES[number]);
+                        }
+                      }}
+                    >
+                      <View style={styles.templateCardHeader}>
+                        {item.type === "industry" && (
+                          <View style={[styles.templateCategoryBadge, { backgroundColor: c.primaryBg }]}>
+                            <Text style={[styles.templateCategoryText, { color: c.primary }]}>
+                              {(item.data as typeof INDUSTRY_TEMPLATES[number]).category}
+                            </Text>
+                          </View>
+                        )}
+                        <Text style={[styles.templateCardName, { color: c.textPrimary }]}>{item.data.name}</Text>
+                        {item.type === "user" && (item.data as Template).is_default && (
+                          <View style={[styles.defaultBadge, { backgroundColor: c.primaryBg }]}>
+                            <Text style={[styles.defaultBadgeText, { color: c.primary }]}>デフォルト</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={[styles.templateCardPreview, { color: c.textSecondary }]} numberOfLines={3}>
+                        {item.data.content.replace(/[#*`\[\]]/g, "").trim() || "（空）"}
+                      </Text>
+                    </TouchableOpacity>
+                  </>
+                );
+              }}
+            />
           </View>
         </View>
       </Modal>
+
+      <Modal
+        visible={folderModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setFolderModalVisible(false)}
+      >
+        <View style={[styles.modalOverlay, { backgroundColor: c.overlay }]}>
+          <View style={[styles.modalContent, { backgroundColor: c.surface }]}>
+            <View style={[styles.modalHeader, { borderBottomColor: c.divider }]}>
+              <Text style={[styles.modalTitle, { color: c.textPrimary }]}>フォルダを選択</Text>
+              <TouchableOpacity onPress={() => setFolderModalVisible(false)}>
+                <Text style={[styles.modalClose, { color: c.primary }]}>閉じる</Text>
+              </TouchableOpacity>
+            </View>
+
+            <FlatList
+              contentContainerStyle={styles.folderList}
+              data={folders}
+              keyExtractor={(item) => item.id}
+              ListEmptyComponent={
+                <Text style={[styles.emptyText, { color: c.textMuted }]}>
+                  フォルダがありません
+                </Text>
+              }
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[
+                    styles.folderItem,
+                    { backgroundColor: c.background, borderColor: c.cardBorder },
+                    selectedFolderId === item.id && { borderColor: c.primary, borderWidth: 2 },
+                  ]}
+                  onPress={() => {
+                    setSelectedFolderId(selectedFolderId === item.id ? null : item.id);
+                    setFolderModalVisible(false);
+                  }}
+                >
+                  <Ionicons
+                    name="folder"
+                    size={22}
+                    color={item.color ?? c.primary}
+                  />
+                  <Text style={[styles.folderItemName, { color: c.textPrimary }]}>{item.name}</Text>
+                  {selectedFolderId === item.id && (
+                    <Ionicons name="checkmark-circle" size={20} color={c.primary} />
+                  )}
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={tagCreateModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setTagCreateModalVisible(false)}
+      >
+        <View style={[styles.modalOverlay, { backgroundColor: c.overlay }]}>
+          <View style={[styles.tagCreateModal, { backgroundColor: c.surface }]}>
+            <Text style={[styles.tagCreateTitle, { color: c.textPrimary }]}>新しいタグを作成</Text>
+            <TextInput
+              style={[styles.tagCreateInput, { color: c.textPrimary, borderColor: c.border, backgroundColor: c.background }]}
+              value={newTagName}
+              onChangeText={setNewTagName}
+              placeholder="タグ名"
+              placeholderTextColor={c.textMuted}
+              autoFocus
+            />
+            <View style={styles.tagCreateActions}>
+              <TouchableOpacity
+                style={[styles.tagCreateCancel, { backgroundColor: c.surfaceSecondary }]}
+                onPress={() => setTagCreateModalVisible(false)}
+              >
+                <Text style={[styles.tagCreateCancelText, { color: c.textSecondary }]}>キャンセル</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.tagCreateConfirm, { backgroundColor: c.primary }]}
+                onPress={handleConfirmCreateTag}
+              >
+                <Text style={[styles.tagCreateConfirmText, { color: c.textInverse }]}>作成</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <ActionSheet
+        visible={shareModalVisible}
+        title="共有形式を選択"
+        options={[
+          { label: "テキスト (.txt)", onPress: () => handleShare("txt") },
+          { label: "Markdown (.md)", onPress: () => handleShare("md") },
+          { label: "PDF (.pdf)", onPress: () => handleShare("pdf") },
+          { label: "Word (.docx)", onPress: () => handleShare("docx") },
+        ]}
+        onClose={() => setShareModalVisible(false)}
+      />
+
+      <ActionSheet
+        visible={deleteModalVisible}
+        title="議事録を削除"
+        options={[
+          { label: "削除する", onPress: confirmDelete, destructive: true },
+        ]}
+        onClose={() => setDeleteModalVisible(false)}
+      />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#FAFAFA" },
+  container: { flex: 1 },
   centered: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 32,
   },
-  loadingText: { marginTop: 12, color: "#64748b", fontSize: 15 },
+  loadingText: { marginTop: 12, fontSize: 15 },
 
-  // Header
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 24,
-    paddingVertical: 16,
-    backgroundColor: "#fff",
+    paddingHorizontal: 8,
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#f1f5f9",
   },
-  headerAction: { fontSize: 16, color: Colors.primary, fontWeight: "500" },
-  headerTitle: { fontSize: 17, fontWeight: "600", color: "#0f172a" },
+  headerBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  headerAction: { fontSize: 16, fontWeight: "500" },
+  headerTitle: { fontSize: 17, fontWeight: "600" },
   saveBtn: { fontWeight: "700" },
   disabled: { opacity: 0.5 },
 
-  // Scroll area
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: 24, paddingBottom: 24 },
 
-  // Title
   titleInput: {
     fontSize: 24,
     fontWeight: "700",
-    color: "#0f172a",
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: "#f1f5f9",
-    marginBottom: 12,
+    marginBottom: 4,
   },
 
-  // Tags
-  tagsSection: { marginBottom: 12 },
-  tagInput: {
+  folderSelector: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  folderSelectorText: {
+    flex: 1,
     fontSize: 14,
-    color: Colors.primary,
+  },
+
+  tagsSection: { marginBottom: 12, marginTop: 4 },
+  tagInputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  tagInput: {
+    flex: 1,
+    fontSize: 14,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: "#f1f5f9",
+  },
+  addTagBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
   },
   tagSuggestions: {
     flexDirection: "row",
@@ -480,13 +918,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 14,
-    backgroundColor: "#f1f5f9",
   },
-  tagChipSelected: { backgroundColor: Colors.primary },
-  tagChipText: { fontSize: 12, color: "#64748b" },
-  tagChipTextSelected: { color: "#fff", fontWeight: "600" },
+  tagChipText: { fontSize: 12 },
 
-  // Transcribe
   transcribeSection: { marginBottom: 12 },
   transcribingRow: {
     flexDirection: "row",
@@ -494,74 +928,68 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 12,
   },
-  transcribingText: { fontSize: 14, color: "#64748b", fontStyle: "italic" },
+  transcribingText: { fontSize: 14, fontStyle: "italic" },
   transcribeBtn: {
-    backgroundColor: "#eef2ff",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 10,
     alignSelf: "flex-start",
   },
-  transcribeBtnText: { fontSize: 14, color: Colors.primary, fontWeight: "600" },
+  transcribeBtnText: { fontSize: 14, fontWeight: "600" },
 
-  // Content
   contentInput: {
     flex: 1,
     fontSize: 15,
-    color: "#0f172a",
     lineHeight: 24,
     paddingVertical: 12,
     minHeight: 300,
   },
 
-  // Bottom bar
   bottomBar: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 24,
+    paddingHorizontal: 16,
     paddingVertical: 12,
     borderTopWidth: 1,
-    borderTopColor: "#f1f5f9",
-    backgroundColor: "#fff",
     gap: 8,
   },
   deleteBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: "#fef2f2",
-  },
-  deleteBtnText: { fontSize: 13, color: "#ef4444", fontWeight: "600" },
-  exportRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-  },
-  exportLabel: { fontSize: 13, color: "#64748b", fontWeight: "600" },
-  exportBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: "#f1f5f9",
-  },
-  exportBtnText: { fontSize: 13, color: "#0f172a", fontWeight: "500" },
-  templateBtn: {
+    gap: 4,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
-    backgroundColor: "#eef2ff",
   },
-  templateBtnText: { fontSize: 13, color: Colors.primary, fontWeight: "600" },
+  deleteBtnText: { fontSize: 13, fontWeight: "600" },
+  templateBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  templateBtnText: { fontSize: 13, fontWeight: "600" },
+  shareBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  shareBtnText: { fontSize: 14, fontWeight: "700" },
 
-  // Modal
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
     justifyContent: "flex-end",
   },
   modalContent: {
-    backgroundColor: "#fff",
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: "70%",
@@ -574,41 +1002,112 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: "#f1f5f9",
   },
-  modalTitle: { fontSize: 17, fontWeight: "600", color: "#0f172a" },
-  modalClose: { fontSize: 16, color: Colors.primary, fontWeight: "500" },
+  modalTitle: { fontSize: 17, fontWeight: "600" },
+  modalClose: { fontSize: 16, fontWeight: "500" },
   modalEmpty: {
     paddingVertical: 32,
     alignItems: "center",
   },
-  modalEmptyText: { fontSize: 14, color: "#64748b" },
+  modalEmptyText: { fontSize: 14 },
+  templateSectionLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 8,
+  },
   templateList: { paddingHorizontal: 24, paddingTop: 12 },
   templateCard: {
-    backgroundColor: "#fafafa",
     padding: 14,
     borderRadius: 12,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: "#f1f5f9",
   },
   templateCardHeader: {
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
     marginBottom: 6,
   },
-  templateCardName: { fontSize: 15, fontWeight: "600", color: "#0f172a" },
-  defaultBadge: {
-    backgroundColor: "#eef2ff",
+  templateCardName: { fontSize: 15, fontWeight: "600" },
+  templateCategoryBadge: {
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 6,
   },
-  defaultBadgeText: { fontSize: 11, color: Colors.primary, fontWeight: "500" },
+  templateCategoryText: { fontSize: 11, fontWeight: "500" },
+  defaultBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  defaultBadgeText: { fontSize: 11, fontWeight: "500" },
   templateCardPreview: {
     fontSize: 13,
-    color: "#64748b",
     lineHeight: 18,
+  },
+
+  folderList: { paddingHorizontal: 24, paddingTop: 12, gap: 8 },
+  folderItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  folderItemName: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: "500",
+  },
+  emptyText: {
+    fontSize: 14,
+    textAlign: "center",
+    paddingVertical: 32,
+  },
+
+  tagCreateModal: {
+    marginHorizontal: 40,
+    borderRadius: 16,
+    padding: 24,
+    gap: 16,
+  },
+  tagCreateTitle: {
+    fontSize: 17,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  tagCreateInput: {
+    fontSize: 15,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  tagCreateActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 10,
+  },
+  tagCreateCancel: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  tagCreateCancelText: {
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  tagCreateConfirm: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  tagCreateConfirmText: {
+    fontSize: 14,
+    fontWeight: "600",
   },
 });

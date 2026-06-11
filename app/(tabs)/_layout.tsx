@@ -1,39 +1,89 @@
 import { Tabs } from "expo-router";
-import { View, Text, StyleSheet } from "react-native";
+import { StyleSheet, Animated, View } from "react-native";
+import { BlurView } from "expo-blur";
+import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Colors, Typography } from "../../src/theme";
+import { useEffect, useRef } from "react";
+import { theme } from "../../src/theme";
+import { useSettings } from "../../src/contexts/SettingsContext";
 
-function TabIcon({ icon, focused }: { icon: string; focused: boolean }) {
+type IoniconName = React.ComponentProps<typeof Ionicons>["name"];
+
+function TabIcon({ icon, focused, c }: { icon: IoniconName; focused: boolean; c: ReturnType<typeof theme> }) {
+  const scale = useRef(new Animated.Value(focused ? 1 : 0.85)).current;
+  const translateY = useRef(new Animated.Value(focused ? -4 : 0)).current;
+
+  useEffect(() => {
+    Animated.spring(scale, {
+      toValue: focused ? 1 : 0.85,
+      damping: 8,
+      stiffness: 200,
+      mass: 0.4,
+      useNativeDriver: true,
+    }).start();
+    Animated.spring(translateY, {
+      toValue: focused ? -4 : 0,
+      damping: 10,
+      stiffness: 220,
+      mass: 0.5,
+      useNativeDriver: true,
+    }).start();
+  }, [focused, scale, translateY]);
+
   return (
-    <View
+    <Animated.View
       style={[
         styles.tabIcon,
-        focused && styles.tabIconActive,
+        focused && {
+          backgroundColor: c.primaryBg,
+          shadowColor: c.primary,
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.3,
+          shadowRadius: 8,
+          elevation: 4,
+        },
+        { transform: [{ scale }, { translateY }] },
       ]}
     >
-      <Text style={[styles.tabIconText, focused && styles.tabIconTextActive]}>
-        {icon}
-      </Text>
-    </View>
+      <Ionicons
+        name={focused ? icon : (`${icon}-outline` as IoniconName)}
+        size={22}
+        color={focused ? c.primary : c.tabInactive}
+      />
+    </Animated.View>
   );
 }
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
+  const { settings } = useSettings();
+  const c = theme(settings.isDarkMode);
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: Colors.tabActive,
-        tabBarInactiveTintColor: Colors.tabInactive,
+        tabBarActiveTintColor: c.tabActive,
+        tabBarInactiveTintColor: c.tabInactive,
         tabBarStyle: {
-          backgroundColor: Colors.tabBarBg,
-          borderTopColor: Colors.tabBarBorder,
-          borderTopWidth: 1,
-          paddingBottom: 8 + insets.bottom,
+          backgroundColor: settings.isDarkMode ? "#1e293b" : "#fff",
+          borderTopWidth: 0,
+          paddingBottom: insets.bottom,
           paddingTop: 8,
           height: 65 + insets.bottom,
         },
+        tabBarBackground: () => (
+          <BlurView
+            intensity={50}
+            tint={settings.isDarkMode ? "dark" : "light"}
+            style={{
+              ...StyleSheet.absoluteFillObject,
+              borderTopWidth: 1,
+              borderTopColor: settings.isDarkMode
+                ? "rgba(148, 163, 184, 0.12)"
+                : "rgba(255, 255, 255, 0.6)",
+            }}
+          />
+        ),
         tabBarLabelStyle: {
           fontSize: 11,
           fontWeight: "600",
@@ -44,21 +94,21 @@ export default function TabLayout() {
         name="index"
         options={{
           title: "録音",
-          tabBarIcon: ({ focused }) => <TabIcon icon="🎙️" focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon icon="mic" focused={focused} c={c} />,
         }}
       />
       <Tabs.Screen
         name="minutes"
         options={{
           title: "議事録",
-          tabBarIcon: ({ focused }) => <TabIcon icon="📄" focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon icon="document-text" focused={focused} c={c} />,
         }}
       />
       <Tabs.Screen
         name="settings"
         options={{
           title: "設定",
-          tabBarIcon: ({ focused }) => <TabIcon icon="⚙️" focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon icon="settings" focused={focused} c={c} />,
         }}
       />
     </Tabs>
@@ -67,19 +117,10 @@ export default function TabLayout() {
 
 const styles = StyleSheet.create({
   tabIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
+    width: 40,
+    height: 36,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
-  },
-  tabIconActive: {
-    backgroundColor: Colors.primaryBg,
-  },
-  tabIconText: {
-    fontSize: 18,
-  },
-  tabIconTextActive: {
-    fontSize: 20,
   },
 });

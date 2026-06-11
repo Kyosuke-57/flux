@@ -1,7 +1,9 @@
 // OTOROKU Design System
 // Colors, typography, spacing, and shared styles
+// Dark mode support v1
 
-export const Colors = {
+// ─── Light Theme ───────────────────────────────────────────
+export const ColorsLight = {
   // Primary palette
   primary: "#7C3AED",        // Violet
   primaryLight: "#8B5CF6",   // Light violet
@@ -16,6 +18,7 @@ export const Colors = {
   white: "#FFFFFF",
   background: "#FAFAFA",
   surface: "#FFFFFF",
+  surfaceSecondary: "#F8FAFC",
   border: "#E2E8F0",
   borderLight: "#F1F5F9",
   divider: "#F1F5F9",
@@ -31,6 +34,9 @@ export const Colors = {
   error: "#EF4444",
   warning: "#F59E0B",
   info: "#3B82F6",
+  errorBg: "#FEF2F2",
+  successBg: "#F0FDF4",
+  warningBg: "#FFFBEB",
 
   // Tab bar
   tabActive: "#7C3AED",
@@ -40,7 +46,86 @@ export const Colors = {
 
   // Shadows
   shadow: "#7C3AED",
+
+  // Component-specific
+  toggleBg: "#E2E8F0",
+  inputBg: "#F8FAFC",
+  cardBorder: "#F1F5F9",
+
+  // Overlay
+  overlay: "rgba(0,0,0,0.4)",
 };
+
+// ─── Dark Theme ────────────────────────────────────────────
+export const ColorsDark: typeof ColorsLight = {
+  // Primary palette
+  primary: "#A78BFA",        // Violet (lighter for dark bg contrast)
+  primaryLight: "#C4B5FD",
+  primaryDark: "#8B5CF6",
+  primaryBg: "#1E1B4B",      // Violet-950
+
+  // Secondary
+  secondary: "#22D3EE",
+  secondaryLight: "#67E8F9",
+
+  // Neutral
+  white: "#0F172A",          // Actually dark bg
+  background: "#0F172A",     // Slate 900
+  surface: "#1E293B",        // Slate 800
+  surfaceSecondary: "#334155", // Slate 700
+  border: "#334155",         // Slate 700
+  borderLight: "#475569",    // Slate 600
+  divider: "#334155",
+
+  // Text
+  textPrimary: "#F1F5F9",    // Slate 100
+  textSecondary: "#94A3B8",  // Slate 400
+  textMuted: "#64748B",      // Slate 500
+  textInverse: "#0F172A",
+
+  // Semantic
+  success: "#4ADE80",
+  error: "#F87171",
+  warning: "#FBBF24",
+  info: "#60A5FA",
+  errorBg: "#451A1A",
+  successBg: "#14532D",
+  warningBg: "#451A03",
+
+  // Tab bar
+  tabActive: "#A78BFA",
+  tabInactive: "#64748B",
+  tabBarBg: "#1E293B",
+  tabBarBorder: "#334155",
+
+  // Shadows (dark mode shadows are subtle/different)
+  shadow: "#000000",
+
+  // Component-specific
+  toggleBg: "#475569",
+  inputBg: "#334155",
+  cardBorder: "#334155",
+
+  // Overlay
+  overlay: "rgba(0,0,0,0.6)",
+};
+
+// ─── Export helpers ────────────────────────────────────────
+export const Colors = ColorsLight; // Default alias for backwards compat
+export const DarkColors = ColorsDark;
+
+/**
+ * Get the full color palette for a given mode.
+ * Use this in components that need dynamic theming:
+ *
+ *   const c = theme(isDark);
+ *   backgroundColor: c.background
+ */
+export function theme(isDark: boolean): typeof ColorsLight {
+  return isDark ? ColorsDark : ColorsLight;
+}
+
+// ─── Rest of the design tokens (shared) ────────────────────
 
 export const Typography = {
   title: {
@@ -123,5 +208,12 @@ export const Shadows = {
     shadowOpacity: 0.15,
     shadowRadius: 16,
     elevation: 8,
+  },
+  glass: {
+    shadowColor: "#7C3AED",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 24,
+    elevation: 10,
   },
 };

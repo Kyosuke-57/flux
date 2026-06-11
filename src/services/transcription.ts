@@ -19,6 +19,8 @@ export interface TranscriptionProgress {
   completedChunks: number;
   totalChunks: number;
   progress: string; // "3/18"
+  progressDetail?: string;
+  minuteId?: string;
   transcript?: string;
   errorMessage?: string;
 }
@@ -35,6 +37,7 @@ export async function startTranscription(params: {
   recordingId: string;
   fileSize: number;
   fileName: string;
+  templateContent?: string;
 }): Promise<string> {
   const {
     data: { session },
@@ -55,6 +58,7 @@ export async function startTranscription(params: {
       recordingId: params.recordingId,
       fileSize: params.fileSize,
       fileName: params.fileName,
+      templateContent: params.templateContent,
     }),
   });
 
@@ -94,6 +98,8 @@ export function subscribeToTranscription(
           completedChunks: record.completed_chunks,
           totalChunks: record.total_chunks,
           progress: `${record.completed_chunks}/${record.total_chunks}`,
+          progressDetail: record.progress_detail || undefined,
+          minuteId: record.minute_id || undefined,
           transcript: record.transcript || undefined,
           errorMessage: record.error_message || undefined,
         };
@@ -117,26 +123,27 @@ export function subscribeToTranscription(
 }
 
 /**
- * フォールバック: ポーリングでジョブのステータスを確認
+ * 文字起こし結果からWhisperの幻覚フレーズを除去する
+ * API側でも除去しているが、クライアント側でも安全網として実行
  */
-export async function pollTranscriptionStatus(
-  jobId: string,
-): Promise<TranscriptionProgress> {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  const token = session?.access_token;
+const HALLUCINATION_PATTERNS = [
+  /^ご視聴ありがとうございました[。\.]?\s*$/m,
+  /^ご視聴ありがとうございました。また次の動画でお会いしましょう[。\.]?\s*$/m,
+  /^チャンネル登録お願いします[。\.]?\s*$/m,
+  /^高評価よろしくお願いします[。\.]?\s*$/m,
+  /^字幕制作[：:].*$/m,
+  /^Thanks? for watching[!\.]?\s*$/im,
+  /^Please like and subscribe[!\.]?\s*$/im,
+  /^See you next time[!\.]?\s*$/im,
+];
 
-  const res = await fetch(
-    `${API_BASE_URL}/api/otoroku-status?jobId=${encodeURIComponent(jobId)}`,
-    {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    },
-  );
-
-  if (!res.ok) {
-    throw new Error(`ステータス取得に失敗しました: ${res.status}`);
+export function removeHallucinations(text: string): string {
+  let result = text;
+  for (const pattern of HALLUCINATION_PATTERNS) {
+    result = result.replace(pattern, "");
   }
-
-  return await res.json();
+  result = result.replace(/\n{3,}/g, "\n\n").trim();
+  return result;
 }
+
+

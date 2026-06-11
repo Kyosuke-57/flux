@@ -60,7 +60,11 @@ export async function createMinute(
   title: string,
   content: string,
   tags?: string[],
-  template_id?: string
+  template_id?: string,
+  folder_id?: string,
+  original_transcript?: string,
+  corrected_transcript?: string,
+  recording_path?: string,
 ): Promise<{ data: Minute | null; error: any }> {
   const {
     data: { user },
@@ -79,11 +83,37 @@ export async function createMinute(
       content,
       tags: tags ?? [],
       template_id: template_id ?? null,
+      folder_id: folder_id ?? null,
+      original_transcript: original_transcript ?? null,
+      corrected_transcript: corrected_transcript ?? null,
+      recording_path: recording_path ?? null,
     })
     .select()
     .single();
 
   return { data, error };
+}
+
+/**
+ * Duplicate a minute. Creates a new minute with "(コピー)" suffix in title.
+ */
+export async function duplicateMinute(
+  id: string,
+): Promise<{ data: Minute | null; error: any }> {
+  const { data: original, error: fetchError } = await getMinute(id);
+  if (fetchError || !original) {
+    return { data: null, error: fetchError ?? new Error("Minute not found") };
+  }
+
+  return createMinute(
+    `${original.title} (コピー)`,
+    original.content,
+    original.tags,
+    original.template_id,
+    original.folder_id ?? undefined,
+    original.original_transcript,
+    original.corrected_transcript,
+  );
 }
 
 /**
@@ -94,7 +124,7 @@ export async function createMinute(
  */
 export async function updateMinute(
   id: string,
-  updates: Partial<Pick<Minute, "title" | "content" | "tags" | "template_id" | "original_transcript">>
+  updates: Partial<Pick<Minute, "title" | "content" | "tags" | "template_id" | "folder_id" | "original_transcript" | "corrected_transcript" | "recording_path">>
 ): Promise<{ data: Minute | null; error: any }> {
   const {
     data: { user },

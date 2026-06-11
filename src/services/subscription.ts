@@ -2,6 +2,59 @@ import { supabase } from "../lib/supabase";
 import type { SubscriptionPlan } from "../types";
 import { PLAN_LIMITS } from "../types";
 
+export interface PlanInfo {
+  id: SubscriptionPlan;
+  name: string;
+  price: string;
+  monthlyMinutes: number;
+  features: string[];
+  highlighted?: boolean;
+}
+
+export const PLANS: PlanInfo[] = [
+  {
+    id: "free",
+    name: "Free",
+    price: "無料",
+    monthlyMinutes: 30,
+    features: [
+      "月30分までの録音",
+      "基本的な文字起こし",
+      "10件までの議事録保存",
+      "テキストエクスポート",
+    ],
+  },
+  {
+    id: "pro",
+    name: "Pro",
+    price: "¥500/月",
+    monthlyMinutes: 120,
+    features: [
+      "月120分までの録音",
+      "高品質文字起こし",
+      "無制限の議事録保存",
+      "フォルダ・タグ管理",
+      "Markdownエクスポート",
+      "優先処理",
+    ],
+    highlighted: true,
+  },
+  {
+    id: "byok",
+    name: "Max",
+    price: "¥1,500/月",
+    monthlyMinutes: 600,
+    features: [
+      "月10時間（600分）までの録音",
+      "最優先・高精度文字起こし",
+      "無制限の議事録保存",
+      "すべての管理機能",
+      "チーム共有機能",
+      "専用APIキー設定",
+    ],
+  },
+];
+
 /**
  * Get the current user's subscription status including plan and usage.
  * Falls back to free plan if the users table doesn't exist yet.
@@ -119,26 +172,9 @@ export async function checkUsageLimit(): Promise<{ allowed: boolean; error: Erro
 
 /**
  * Resets monthly_usage_seconds for all users.
- *
- * ⚠️ この関数は管理者専用のサーバーサイド関数（cron job）で呼び出すべきです。
- * クライアントからの呼び出しは RLS ポリシーで制限してください。
- * 現在は認証チェックのみ行っています。
+ * Intended to be called periodically (e.g. via a cron job).
  */
 export async function resetMonthlyUsage() {
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    return { data: null, error: authError ?? new Error("認証されていません") };
-  }
-
-  // TODO: 管理者ロールのチェックを追加する
-  // 例: const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-
-  console.warn("resetMonthlyUsage: クライアントからの月次リセットは推奨されません。サーバーサイドの cron job を使用してください。");
-
   const { data, error } = await supabase
     .from("users")
     .update({ monthly_usage_seconds: 0 })
@@ -148,23 +184,33 @@ export async function resetMonthlyUsage() {
 }
 
 /**
- * STUB: RevenueCat SDK integration for managing entitlements.
- *
- * ⚠️ この関数はスタブです。実際の実装に置き換えてください。
- * 本番環境では RevenueCat SDK を設定し、この関数を置き換える必要があります。
+ * Placeholder: RevenueCat SDK integration for managing entitlements.
+ * Replace with actual RevenueCat calls when the SDK is configured.
  */
 export async function getRevenueCatEntitlements() {
-  console.warn("STUB: RevenueCat SDK not yet configured — returning stub.");
+  // TODO: Integrate RevenueCat SDK
+  // Example:
+  //   import Purchases from 'react-native-purchases';
+  //   const offerings = await Purchases.getOfferings();
+  //   return offerings.current;
+  console.warn("RevenueCat SDK not yet configured — returning stub.");
   return { entitlements: null };
 }
 
 /**
- * STUB: Creates a Stripe checkout session for upgrading/downgrading plans.
- *
- * ⚠️ この関数はスタブです。実際の実装に置き換えてください。
- * 本番環境ではサーバーサイドの Stripe Checkout Session 作成エンドポイントと連携する必要があります。
+ * Placeholder: Creates a Stripe checkout session for upgrading/downgrading plans.
+ * Replace with actual Stripe server call when the backend endpoint is ready.
  */
 export async function createStripeCheckoutSession(plan: SubscriptionPlan) {
-  console.warn("STUB: Stripe integration not yet configured — returning stub.", { plan });
+  // TODO: Call backend endpoint to create Stripe Checkout Session
+  // Example:
+  //   const response = await fetch('/api/create-checkout-session', {
+  //     method: 'POST',
+  //     headers: { 'Content-Type': 'application/json' },
+  //     body: JSON.stringify({ plan, userId: (await supabase.auth.getUser()).data.user?.id }),
+  //   });
+  //   const session = await response.json();
+  //   return session;
+  console.warn("Stripe integration not yet configured — returning stub.", { plan });
   return { sessionUrl: null, error: new Error("Stripe checkout not configured") };
 }

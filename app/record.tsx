@@ -1,92 +1,298 @@
-/**
- * RecordScreen — 録音 → R2 アップロード → 文字起こし → 完了
- *
- * Supabase Realtime で進捗を受信し、逐次表示する。
- */
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
-  Animated,
   Alert,
+  Animated,
   Easing,
+  Dimensions,
+  BackHandler,
+  Modal,
+  ScrollView,
+  ActivityIndicator,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import {
   startRecording,
   stopRecording,
   pauseRecording,
   resumeRecording,
   importAudio,
+  startMeteringPolling,
 } from "../src/services/recording";
-import { getDuration } from "../src/services/recording";
-import { uploadToR2 } from "../src/services/r2-upload";
-import {
-  startTranscription,
-  subscribeToTranscription,
-} from "../src/services/transcription";
+import { usePipeline } from "../src/hooks/usePipeline";
+import { getAllTemplates } from "../src/services/templates";
+import { saveRecordingLocally } from "../src/services/local-audio";
 import type { RecordingState } from "../src/services/recording";
-import type { TranscriptionProgress } from "../src/services/transcription";
+import type { Template } from "../src/types";
+import { useHaptics, useBounce, useCelebration, BounceInView, FadeInView } from "../src/animations";
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+import { useSettings } from "../src/contexts/SettingsContext";
+import type { RecordingEffect } from "../src/contexts/SettingsContext";
+import { theme, BorderRadius, Shadows, Colors } from "../src/theme";
+import { WaveformEffect, PulseEffect } from "../src/components/RecordingEffects";
 
-type PipelineState = "idle" | "recording" | "paused" | "uploading" | "transcribing" | "completed" | "error";
+type PipelineState = "idle" | "recording" | "paused" | "uploading" | "transcribing" | "completed" | "failed";
 
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
+const TIPS = [
+  "タグを活用すると議事録をテーマ別に整理できます",
+  "フォルダでプロジェクトや月別に分類できます",
+  "テンプレートを使えば議事録の書式を統一できます",
+  "文字起こし後、補正文を編集して見やすくできます",
+  "ダークモードは設定から切り替えられます",
+  "録音ファイルは自動でクラウドにアップロードされます",
+  "作成した議事録はテキストやMarkdownで書き出せます",
+  "最近の議事録はホーム画面からすぐにアクセスできます",
+  "長押しで議事録の複製や削除ができます",
+  "録音品質は設定画面で変更できます",
+];
+
+const SCREEN_WIDTH = Dimensions.get("window").width;
+const SCREEN_HEIGHT = Dimensions.get("window").height;
+
+function RippleEffect({ color, isActive, volume = 0 }: { color: string; isActive: boolean; volume?: number }) {
+  const ripples = useRef(
+    Array.from({ length: 3 }, () => ({
+      scale: new Animated.Value(0),
+      opacity: new Animated.Value(0),
+    }))
+  ).current;
+  const progress = useRef([0, 0.33, 0.66]); // 各リップルの位相オフセット
+  const volumeRef = useRef(0);
+  volumeRef.current = volume;
+
+  useEffect(() => {
+    if (!isActive) {
+      ripples.forEach((r) => {
+        r.scale.setValue(0);
+        r.opacity.setValue(0);
+      });
+      progress.current = [0, 0.33, 0.66];
+      return;
+    }
+
+    const timer = setInterval(() => {
+      const vol = volumeRef.current;
+      // 音量でリップルの進行速度を変化
+      const speed = 0.012 + vol * 0.04;
+
+      progress.current = progress.current.map((p, i) => {
+        const next = p + speed * (1 + i * 0.15);
+        return next > 1 ? next - 1 : next;
+      });
+
+      ripples.forEach((r, i) => {
+        const p = progress.current[i];
+        // scale: 0→1 を進行度に応じて
+        r.scale.setValue(p);
+        // opacity: 前半で立ち上がり後半でフェード
+        r.opacity.setValue(p < 0.1 ? p / 0.1 * 0.4 : (1 - p) / 0.9 * 0.4 * vol);
+      });
+    }, 30);
+
+    return () => clearInterval(timer);
+  }, [isActive, ripples]);
+
+  const size = Math.max(SCREEN_WIDTH, SCREEN_HEIGHT) * 1.2;
+
+  return (
+    <>
+      {ripples.map((r, i) => (
+        <Animated.View
+          key={i}
+          style={{
+            position: "absolute",
+            width: size,
+            height: size,
+            borderRadius: size / 2,
+            borderWidth: 2,
+            borderColor: color,
+            opacity: r.opacity,
+            transform: [{ scale: r.scale }],
+          }}
+          pointerEvents="none"
+        />
+      ))}
+    </>
+  );
+}
+
+function AnimatedHourglass({ color, isDeterminate }: { color: string; isDeterminate: boolean }) {
+  const pulse = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.parallel([
+          Animated.timing(pulse, {
+            toValue: 1,
+            duration: 1200,
+            easing: Easing.sin,
+            useNativeDriver: true,
+          }),
+        ]),
+        Animated.parallel([
+          Animated.timing(pulse, {
+            toValue: 0,
+            duration: 1200,
+            easing: Easing.sin,
+            useNativeDriver: true,
+          }),
+        ]),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [pulse]);
+
+  const rotate = pulse.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: ["-8deg", "8deg", "-8deg"],
+  });
+
+  const opacity = pulse.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [0.7, 1, 0.7],
+  });
+
+  return (
+    <Animated.View style={{ opacity, transform: [{ rotate }] }}>
+      <Ionicons
+        name={isDeterminate ? "document-text-outline" : "hourglass-outline"}
+        size={36}
+        color={color}
+      />
+    </Animated.View>
+  );
+}
+
+function UploadingIcon({ color }: { color: string }) {
+  const floatAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(floatAnim, {
+          toValue: 1,
+          duration: 1200,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(floatAnim, {
+          toValue: 0,
+          duration: 1200,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [floatAnim]);
+
+  const translateY = floatAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -6],
+  });
+
+  const arrowOpacity = floatAnim.interpolate({
+    inputRange: [0, 0.4, 0.6, 1],
+    outputRange: [1, 0.3, 0.3, 1],
+  });
+
+  return (
+    <View style={{ width: 48, height: 48, justifyContent: "center", alignItems: "center" }}>
+      <Animated.View style={{ transform: [{ translateY }] }}>
+        <Ionicons name="cloud-outline" size={36} color={color} />
+      </Animated.View>
+      <Animated.View style={{ position: "absolute", opacity: arrowOpacity, transform: [{ translateY }] }}>
+        <Ionicons name="arrow-up" size={18} color={color} />
+      </Animated.View>
+    </View>
+  );
+}
 
 export default function RecordScreen() {
-  const [recState, setRecState] = useState<RecordingState>("idle");
-  const [pipelineState, setPipelineState] = useState<PipelineState>("idle");
-  const [elapsed, setElapsed] = useState(0);
-  const [progress, setProgress] = useState<TranscriptionProgress | null>(null);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const { settings } = useSettings();
+  const c = theme(settings.isDarkMode);
+  const haptics = useHaptics();
+  const celebration = useCelebration();
+  const recordBtn = useBounce({ scaleIn: 0.93, haptic: false });
 
-  // Placeholder
+  const [recState, setRecState] = useState<RecordingState>("idle");
+  const pipeline = usePipeline();
+  const [elapsed, setElapsed] = useState(0);
+
   const [isOfflineMode] = useState(false);
+  const [sourceFileName, setSourceFileName] = useState<string | null>(null);
+  const [currentTipIndex, setCurrentTipIndex] = useState(0);
+  const [audioVolume, setAudioVolume] = useState(0); // 0-1 音量レベル
+  const isProcessing = pipeline.status === "uploading" || pipeline.status === "transcribing";
+
+  // Template picker
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const pendingTranscribe = useRef(false);
 
   const startTimeRef = useRef<number>(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  const unsubscribeRef = useRef<(() => void) | null>(null);
+  const glowAnim = useRef(new Animated.Value(0)).current;
 
-  // -----------------------------------------------------------------------
-  // Pulsing animation for recording
-  // -----------------------------------------------------------------------
+  // 音量メータリングのポーリング
+  useEffect(() => {
+    if (recState !== "recording") {
+      setAudioVolume(0);
+      return;
+    }
+
+    const unsub = startMeteringPolling((metering: number) => {
+      // 実用レンジ -50dB（無音）〜 -10dB（大声）を 0-1 にマッピング
+      // -50dB 以下はノイズゲートでカット
+      const clamped = Math.max(-50, Math.min(-10, metering));
+      // -50 → 0, -10 → 1 に正規化
+      const normalized = (clamped + 50) / 40;
+      // パワーカーブで小さな音への反応を抑える（指数 1.5〜2.0）
+      const volume = Math.pow(normalized, 1.8);
+      setAudioVolume(volume);
+    }, 80);
+
+    return () => {
+      unsub();
+      setAudioVolume(0);
+    };
+  }, [recState]);
+
   useEffect(() => {
     if (recState === "recording") {
-      const loop = Animated.loop(
+      const glow = Animated.loop(
         Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 0.82,
-            duration: 900,
+          Animated.timing(glowAnim, {
+            toValue: 1,
+            duration: 1500,
             easing: Easing.inOut(Easing.ease),
             useNativeDriver: true,
           }),
-          Animated.timing(pulseAnim, {
-            toValue: 1,
-            duration: 900,
+          Animated.timing(glowAnim, {
+            toValue: 0,
+            duration: 1500,
             easing: Easing.inOut(Easing.ease),
             useNativeDriver: true,
           }),
         ]),
       );
-      loop.start();
-      return () => loop.stop();
+      glow.start();
+      return () => { glow.stop(); };
     } else {
-      pulseAnim.setValue(1);
+      glowAnim.setValue(0);
     }
-  }, [recState, pulseAnim]);
+  }, [recState, glowAnim]);
 
-  // -----------------------------------------------------------------------
-  // Timer
-  // -----------------------------------------------------------------------
   useEffect(() => {
     if (recState === "recording") {
       startTimeRef.current = Date.now() - elapsed * 1000;
@@ -105,147 +311,169 @@ export default function RecordScreen() {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recState]);
 
-  // Cleanup on unmount
+  useFocusEffect(
+    useCallback(() => {
+      pipeline.reset();
+      setSourceFileName(null);
+    }, []),
+  );
+
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
-      unsubscribeRef.current?.();
     };
   }, []);
 
-  // -----------------------------------------------------------------------
-  // Pipeline
-  // -----------------------------------------------------------------------
+  useEffect(() => {
+    const onBackPress = () => {
+      if (recState === "recording" || recState === "paused") {
+        Alert.alert(
+          "録音をキャンセルしますか？",
+          "録音データは破棄されます。",
+          [
+            { text: "続けて録音", style: "cancel" },
+            { text: "キャンセルする", style: "destructive", onPress: () => router.back() },
+          ],
+        );
+        return true;
+      }
+      if (isProcessing) {
+        Alert.alert(
+          "処理中です",
+          "文字起こし処理を中断して戻りますか？",
+          [
+            { text: "待つ", style: "cancel" },
+            { text: "中断する", style: "destructive", onPress: () => router.back() },
+          ],
+        );
+        return true;
+      }
+      return false;
+    };
+    const subscription = BackHandler.addEventListener("hardwareBackPress", onBackPress);
+    return () => subscription.remove();
+  }, [recState, isProcessing]);
 
-  const runPipeline = async (uri: string) => {
-    try {
-      setPipelineState("uploading");
-      setErrorMsg(null);
+  useEffect(() => {
+    if (pipeline.status !== "transcribing") return;
+    const tipTimer = setInterval(() => {
+      setCurrentTipIndex((prev) => (prev + 1) % TIPS.length);
+    }, 6000);
+    return () => clearInterval(tipTimer);
+  }, [pipeline.status]);
 
-      const durationMs = await getDuration(uri);
-      const fileName = `recording_${Date.now()}.m4a`;
-      const mimeType = "audio/mp4";
-      const fileSize = await getFileSizeExpo(uri);
-
-      // 1. R2 にアップロード
-      const { r2Key } = await uploadToR2({
-        uri,
-        filename: fileName,
-        mimeType,
-        fileSize,
-      });
-
-      // 2. 文字起こし依頼
-      setPipelineState("transcribing");
-      const recordingId = crypto.randomUUID?.() ?? `${Date.now()}`;
-      const jobId = await startTranscription({
-        r2Key,
-        recordingId,
-        fileSize,
-        fileName,
-      });
-
-      // 3. Realtime で進捗購読
-      const unsub = subscribeToTranscription(
-        jobId,
-        (p) => {
-          setProgress(p);
-          if (p.status === "completed") {
-            setPipelineState("completed");
-            unsubscribeRef.current = null;
-          } else if (p.status === "failed") {
-            setPipelineState("error");
-            setErrorMsg(p.errorMessage ?? "文字起こしに失敗しました");
-            unsubscribeRef.current = null;
-          }
-        },
-        (err) => {
-          setErrorMsg(err);
-          setPipelineState("error");
-        },
-      );
-      unsubscribeRef.current = unsub;
-    } catch (err: any) {
-      setErrorMsg(err?.message ?? "処理中にエラーが発生しました");
-      setPipelineState("error");
+  useEffect(() => {
+    if (pipeline.status === "completed") {
+      celebration.trigger();
+      if (pipeline.minuteId) {
+        const timer = setTimeout(() => router.replace(`/minute/${pipeline.minuteId}`), 2000);
+        return () => clearTimeout(timer);
+      }
     }
-  };
-
-  // -----------------------------------------------------------------------
-  // Handlers
-  // -----------------------------------------------------------------------
+  }, [pipeline.status]);
 
   const handleRecord = async () => {
     if (recState !== "idle") return;
+    haptics.heavyTap();
     try {
       await startRecording();
       setElapsed(0);
       setRecState("recording");
-      setPipelineState("recording");
-      setErrorMsg(null);
     } catch (err: any) {
+      haptics.errorNotification();
       Alert.alert("録音できません", err?.message ?? "録音の開始に失敗しました。");
     }
   };
 
   const handlePause = async () => {
+    haptics.lightTap();
     try {
       await pauseRecording();
       setRecState("paused");
-      setPipelineState("paused");
     } catch (err: any) {
       Alert.alert("エラー", err?.message ?? "録音の一時停止に失敗しました");
     }
   };
 
   const handleResume = async () => {
+    haptics.lightTap();
     try {
       await resumeRecording();
       setRecState("recording");
-      setPipelineState("recording");
     } catch (err: any) {
       Alert.alert("エラー", err?.message ?? "録音の再開に失敗しました");
     }
   };
 
+  const [localRecordingPath, setLocalRecordingPath] = useState<string | null>(null);
+
   const handleStop = async () => {
+    haptics.mediumTap();
     try {
       const result = await stopRecording();
       setRecState("idle");
       setElapsed(0);
-
-      // パイプライン実行
-      await runPipeline(result.uri);
+      setSourceFileName(null);
+      const localPath = await saveRecordingLocally(result.uri, `rec_${Date.now()}`);
+      setLocalRecordingPath(localPath);
     } catch (err: any) {
+      haptics.errorNotification();
       Alert.alert("エラー", err?.message ?? "録音の停止に失敗しました");
     }
+  };
+
+  const handleOpenTemplatePicker = useCallback(async () => {
+    if (!localRecordingPath) return;
+    setTemplatesLoading(true);
+    setShowTemplatePicker(true);
+    try {
+      const { data } = await getAllTemplates();
+      const tpls = data ?? [];
+      setTemplates(tpls);
+      const defaultTpl = tpls.find((t) => t.is_default);
+      setSelectedTemplateId(defaultTpl?.id ?? null);
+    } catch {
+      setTemplates([]);
+      setSelectedTemplateId(null);
+    } finally {
+      setTemplatesLoading(false);
+    }
+  }, [localRecordingPath]);
+
+  const handleStartTranscription = useCallback(async () => {
+    if (!localRecordingPath) return;
+    setShowTemplatePicker(false);
+    const selected = selectedTemplateId
+      ? templates.find((t) => t.id === selectedTemplateId)
+      : null;
+    pipeline.startPipeline(localRecordingPath, selected?.content);
+  }, [localRecordingPath, selectedTemplateId, templates]);
+
+  const handleSaveForLater = () => {
+    if (!localRecordingPath) return;
+    router.replace(`/minute/new?recordingPath=${encodeURIComponent(localRecordingPath)}` as any);
   };
 
   const handleImport = async () => {
     try {
       const result = await importAudio();
       if (!result) return;
-
       const asset = result.assets?.[0];
       if (!asset?.uri) {
         Alert.alert("エラー", "音声ファイルが選択されていません。");
         return;
       }
-
+      const fname = asset.name ?? "ファイル";
       Alert.alert(
         "ファイルをインポート",
-        `「${asset.name ?? "ファイル"}」を文字起こししますか？`,
+        `「${fname}」を文字起こししますか？`,
         [
           { text: "キャンセル", style: "cancel" },
           {
             text: "開始",
-            onPress: () => {
-              setPipelineState("uploading");
-              runPipeline(asset.uri);
-            },
+            onPress: () => { setSourceFileName(fname); pipeline.startPipeline(asset.uri); },
           },
         ],
       );
@@ -254,104 +482,122 @@ export default function RecordScreen() {
     }
   };
 
-  const handleRetry = async () => {
-    // エラー後のリトライ
-    setPipelineState("idle");
-    setProgress(null);
-    setErrorMsg(null);
+  const handleRetry = () => {
+    pipeline.reset();
+    setSourceFileName(null);
   };
 
   const handleViewResult = () => {
-    // 文字起こし完了 → 議事録編集画面へ
-    router.replace("/minutes");
-  };
-
-  // -----------------------------------------------------------------------
-  // Progress display
-  // -----------------------------------------------------------------------
-
-  const renderProgress = () => {
-    switch (pipelineState) {
-      case "idle":
-      case "recording":
-      case "paused":
-        return null;
-      case "uploading":
-        return (
-          <View style={styles.progressContainer}>
-            <Text style={styles.progressIcon}>☁️</Text>
-            <Text style={styles.progressText}>アップロード中...</Text>
-          </View>
-        );
-      case "transcribing":
-        return (
-          <View style={styles.progressContainer}>
-            <Text style={styles.progressIcon}>📝</Text>
-            <Text style={styles.progressText}>
-              文字起こし中...
-              {progress && ` (${progress.progress})`}
-            </Text>
-            {progress && (
-              <View style={styles.progressBarBg}>
-                <View
-                  style={[
-                    styles.progressBarFill,
-                    {
-                      width: progress.totalChunks > 0
-                        ? `${(progress.completedChunks / progress.totalChunks) * 100}%`
-                        : "0%",
-                    },
-                  ]}
-                />
-              </View>
-            )}
-          </View>
-        );
-      case "completed":
-        return (
-          <View style={styles.progressContainer}>
-            <Text style={styles.progressIcon}>✅</Text>
-            <Text style={styles.progressText}>文字起こし完了！</Text>
-            <TouchableOpacity style={styles.actionButton} onPress={handleViewResult}>
-              <Text style={styles.actionButtonText}>結果を見る</Text>
-            </TouchableOpacity>
-          </View>
-        );
-      case "error":
-        return (
-          <View style={styles.progressContainer}>
-            <Text style={styles.progressIcon}>⚠️</Text>
-            <Text style={styles.progressText}>文字起こしに失敗しました</Text>
-            {errorMsg && (
-              <Text style={styles.errorDetail}>{errorMsg}</Text>
-            )}
-            <View style={styles.errorActions}>
-              <TouchableOpacity
-                style={styles.errorButton}
-                onPress={handleRetry}
-              >
-                <Text style={styles.errorButtonText}>リトライ</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.errorButton, styles.errorButtonSecondary]}
-                onPress={() => {
-                  setPipelineState("idle");
-                  setErrorMsg(null);
-                }}
-              >
-                <Text style={[styles.errorButtonText, styles.errorButtonTextSecondary]}>
-                  後で試す
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        );
+    if (pipeline.minuteId) {
+      const params = localRecordingPath ? `?recordingPath=${encodeURIComponent(localRecordingPath)}` : "";
+      router.replace(`/minute/${pipeline.minuteId}${params}` as any);
+    } else {
+      router.replace("/minutes");
     }
   };
 
-  // -----------------------------------------------------------------------
-  // Render helpers
-  // -----------------------------------------------------------------------
+  const renderProgress = () => {
+    const { status, uploadProgress, transcriptionProgress, errorMessage } = pipeline;
+
+    switch (status) {
+      case "idle":
+        return null;
+      case "uploading":
+        return (
+          <BounceInView key="uploading" style={styles.progressCard}>
+            <UploadingIcon color={c.primary} />
+            <Text style={[styles.progressText, { color: c.textPrimary }]}>
+              {uploadProgress < 100 ? "アップロード中..." : "アップロード完了"}
+            </Text>
+            {sourceFileName && (
+              <Text style={[styles.progressFileName, { color: c.textMuted }]}>{sourceFileName}</Text>
+            )}
+            <Text style={[styles.progressPercent, { color: c.primary }]}>{uploadProgress}%</Text>
+            <View style={[styles.progressBarBg, { backgroundColor: c.border }]}>
+              <View style={[styles.progressBarFill, { backgroundColor: c.primary, width: `${uploadProgress}%` }]} />
+            </View>
+          </BounceInView>
+        );
+      case "transcribing": {
+        const tp = transcriptionProgress;
+        const hasChunks = tp?.totalChunks != null && tp.totalChunks > 0;
+        const pct = hasChunks
+          ? Math.round((tp.completedChunks / tp.totalChunks) * 100)
+          : 0;
+        const isIndeterminate = !hasChunks || pct === 0;
+        return (
+          <BounceInView key="transcribing" style={styles.progressCard}>
+            <AnimatedHourglass color={c.primary} isDeterminate={!isIndeterminate} />
+            <Text style={[styles.progressText, { color: c.textPrimary }]}>
+              {tp?.progressDetail ?? "文字起こし中..."}
+            </Text>
+            {sourceFileName && (
+              <Text style={[styles.progressFileName, { color: c.textMuted }]}>{sourceFileName}</Text>
+            )}
+            {isIndeterminate ? (
+              <Text style={[styles.progressIndeterminate, { color: c.textMuted }]}>準備中...</Text>
+            ) : (
+              <>
+                <Text style={[styles.progressPercent, { color: c.primary }]}>{pct}%</Text>
+                <View style={[styles.progressBarBg, { backgroundColor: c.border }]}>
+                  <View style={[styles.progressBarFill, { backgroundColor: c.primary, width: `${pct}%` }]} />
+                </View>
+              </>
+            )}
+            {tp?.completedChunks != null && tp?.totalChunks != null && (
+              <Text style={[styles.progressSub, { color: c.textMuted }]}>
+                {tp.completedChunks}/{tp.totalChunks} チャンク
+              </Text>
+            )}
+            <View style={[styles.tipBox, { backgroundColor: c.primaryBg }]}>
+              <Ionicons name="bulb-outline" size={14} color={c.primary} />
+              <Text style={[styles.tipText, { color: c.primary }]}>{TIPS[currentTipIndex]}</Text>
+            </View>
+          </BounceInView>
+        );
+      }
+      case "completed":
+        return (
+          <BounceInView key="completed" style={[styles.progressCard, celebration.animatedStyle]}>
+            <View style={[styles.completedCircle, { backgroundColor: c.successBg }]}>
+              <Ionicons name="checkmark-circle" size={48} color={c.success} />
+            </View>
+            <Text style={[styles.progressText, { color: c.textPrimary, fontSize: 18 }]}>文字起こし完了！</Text>
+            <TouchableOpacity
+              style={[styles.actionButton, { backgroundColor: c.primary }]}
+              onPress={() => { haptics.celebrateTap(); handleViewResult(); }}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.actionButtonText, { color: c.textInverse }]}>結果を見る</Text>
+            </TouchableOpacity>
+          </BounceInView>
+        );
+      case "failed":
+        return (
+          <FadeInView key="error" style={styles.progressCard}>
+            <Ionicons name="alert-circle-outline" size={36} color={c.error} />
+            <Text style={[styles.progressText, { color: c.textPrimary }]}>文字起こしに失敗しました</Text>
+            {errorMessage && (
+              <Text style={[styles.errorDetail, { color: c.error }]}>{errorMessage}</Text>
+            )}
+            <View style={styles.errorActions}>
+              <TouchableOpacity
+                style={[styles.errorButton, { backgroundColor: c.primary }]}
+                onPress={handleRetry}
+              >
+                <Text style={[styles.errorButtonText, { color: c.textInverse }]}>リトライ</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.errorButton, { backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.border }]}
+                onPress={() => pipeline.reset()}
+              >
+                <Text style={[styles.errorButtonText, { color: c.textPrimary }]}>後で試す</Text>
+              </TouchableOpacity>
+            </View>
+          </FadeInView>
+        );
+    }
+  };
 
   const formatTime = (s: number) => {
     const m = Math.floor(s / 60);
@@ -359,354 +605,656 @@ export default function RecordScreen() {
     return `${m.toString().padStart(2, "0")}:${sec.toString().padStart(2, "0")}`;
   };
 
-  const disabled = isOfflineMode || pipelineState === "uploading" || pipelineState === "transcribing";
+  const disabled = isOfflineMode || isProcessing;
 
-  // -----------------------------------------------------------------------
-  // Render
-  // -----------------------------------------------------------------------
+  const getTitle = () => {
+    if (recState === "recording") return "録音中...";
+    if (recState === "paused") return "一時停止中";
+    switch (pipeline.status) {
+      case "idle": return "新規録音";
+      case "uploading": return "アップロード中";
+      case "transcribing": return "文字起こし中...";
+      case "completed": return "完了";
+      case "failed": return "エラー";
+    }
+  };
+
+  const glowOpacity = glowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.15, 0.45],
+  });
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.cancel}>キャンセル</Text>
+    <SafeAreaView style={[styles.container, { backgroundColor: c.background }]}>
+      <View style={[styles.header, { borderBottomColor: c.divider }]}>
+        <TouchableOpacity
+          onPress={() => {
+            if (recState === "recording" || recState === "paused") {
+              Alert.alert(
+                "録音をキャンセルしますか？",
+                "録音データは破棄されます。",
+                [
+                  { text: "録音を続ける", style: "cancel" },
+                  { text: "やめる", style: "destructive", onPress: () => router.back() },
+                ],
+              );
+            } else if (isProcessing) {
+              Alert.alert(
+                "処理中です",
+                "文字起こし処理を中断して戻りますか？",
+                [
+                  { text: "待つ", style: "cancel" },
+                  { text: "中断する", style: "destructive", onPress: () => router.back() },
+                ],
+              );
+            } else {
+              router.back();
+            }
+          }}
+          style={styles.headerBtn}
+        >
+          <Ionicons name="chevron-back" size={22} color={c.textSecondary} />
+          <Text style={[styles.cancel, { color: c.textSecondary }]}>
+            {pipeline.status === "idle" && recState === "idle" ? "戻る" : "キャンセル"}
+          </Text>
         </TouchableOpacity>
-        <Text style={styles.title}>
-          {pipelineState === "idle" || pipelineState === "uploading"
-            ? "新規録音"
-            : pipelineState === "recording"
-              ? "録音中..."
-              : pipelineState === "paused"
-                ? "一時停止中"
-                : pipelineState === "transcribing"
-                  ? "文字起こし中..."
-                  : pipelineState === "completed"
-                    ? "完了"
-                    : "エラー"}
-        </Text>
-        <View style={{ width: 60 }} />
+        <Text style={[styles.title, { color: c.textPrimary }]}>{getTitle()}</Text>
+        <View style={{ width: 80 }} />
       </View>
 
-      {/* Main area */}
       <View style={styles.content}>
-        {pipelineState !== "idle" && pipelineState !== "uploading" && pipelineState !== "transcribing" && (
-          <Text style={styles.timer}>{formatTime(elapsed)}</Text>
+        {pipeline.status === "idle" && recState === "idle" && !localRecordingPath && (
+          <BounceInView delay={0} style={styles.idleContent}>
+            <View style={styles.recordButtonWrapper}>
+              <Animated.View
+                style={[
+                  styles.glowRing,
+                  {
+                    backgroundColor: c.primary,
+                    opacity: glowOpacity,
+                  },
+                ]}
+              />
+              <TouchableOpacity
+                style={[styles.bigRecordOuter, { backgroundColor: c.primaryBg }, disabled && styles.disabled]}
+                onPress={handleRecord}
+                onPressIn={recordBtn.onPressIn}
+                onPressOut={recordBtn.onPressOut}
+                disabled={disabled}
+                activeOpacity={0.8}
+              >
+                <View style={[styles.bigRecordInner, { backgroundColor: c.primary }]}>
+                  <Ionicons name="mic" size={36} color="#fff" />
+                </View>
+              </TouchableOpacity>
+            </View>
+            <Text style={[styles.tapToRecord, { color: c.textPrimary }]}>タップして録音</Text>
+            <Text style={[styles.tapSubtext, { color: c.textMuted }]}>または音声ファイルをインポート</Text>
+
+            <FadeInView delay={400}>
+              <TouchableOpacity
+                style={[styles.importButton, { backgroundColor: c.surface, borderColor: c.border }]}
+                onPress={() => { haptics.lightTap(); handleImport(); }}
+                disabled={disabled}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="folder-open-outline" size={20} color={c.textSecondary} />
+                <Text style={[styles.importText, { color: c.textSecondary }]}>ファイルをインポート</Text>
+              </TouchableOpacity>
+            </FadeInView>
+          </BounceInView>
         )}
 
-        {(pipelineState === "uploading" || pipelineState === "transcribing") && (
-          <Text style={styles.timer}>{formatTime(elapsed)}</Text>
+        {(recState === "recording" || recState === "paused") && (
+          <BounceInView delay={0} style={styles.recordingContainer}>
+            <View style={styles.effectLayer} pointerEvents="none">
+              {settings.recordingEffect === "ripple" && (
+                <RippleEffect color={c.primary} isActive={recState === "recording"} volume={audioVolume} />
+              )}
+              {settings.recordingEffect === "waveform" && (
+                <WaveformEffect color={c.primary} isActive={recState === "recording"} volume={audioVolume} />
+              )}
+              {settings.recordingEffect === "pulse" && (
+                <PulseEffect color={c.primary} isActive={recState === "recording"} volume={audioVolume} />
+              )}
+            </View>
+
+            <View style={styles.timerContainer}>
+              <Text style={[styles.timer, { color: c.textPrimary }]}>{formatTime(elapsed)}</Text>
+
+              {recState === "paused" && (
+                <View style={[styles.pausedBadge, { backgroundColor: c.warningBg }]}>
+                  <Text style={[styles.pausedText, { color: c.warning }]}>一時停止中</Text>
+                </View>
+              )}
+            </View>
+          </BounceInView>
         )}
 
-        {pipelineState === "idle" && (
-          <View style={styles.idleContent}>
-            <TouchableOpacity
-              style={[styles.bigRecordOuter, disabled && styles.disabled]}
-              onPress={handleRecord}
-              disabled={disabled}
-              activeOpacity={0.75}
-            >
-              <View style={styles.bigRecordInner}>
-                <View style={styles.recordDot} />
-              </View>
-            </TouchableOpacity>
-            <Text style={styles.tapToRecord}>タップして録音</Text>
-
-            <TouchableOpacity
-              style={[styles.importButton, disabled && styles.disabled]}
-              onPress={handleImport}
-              disabled={disabled}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.importIcon}>📂</Text>
-              <Text style={styles.importText}>音声ファイルをインポート</Text>
-            </TouchableOpacity>
+        {isProcessing && (
+          <View style={styles.processingContainer}>
+            {renderProgress()}
           </View>
         )}
 
-        {/* Recording / Paused indicator */}
-        {(recState === "recording" || recState === "paused") && (
-          <Animated.View
-            style={[
-              styles.recordingIndicator,
-              recState === "recording" && { transform: [{ scale: pulseAnim }] },
-            ]}
-          >
-            <View style={styles.recordingDot} />
-          </Animated.View>
-        )}
+        {pipeline.status === "completed" && renderProgress()}
+        {pipeline.status === "failed" && renderProgress()}
 
-        {/* Pipeline progress */}
-        {renderProgress()}
+        {localRecordingPath && pipeline.status === "idle" && !isProcessing && (
+          <BounceInView key="saved" style={styles.progressCard}>
+            <View style={[styles.completedCircle, { backgroundColor: c.successBg }]}>
+              <Ionicons name="checkmark-circle" size={48} color={c.success} />
+            </View>
+            <Text style={[styles.progressText, { color: c.textPrimary, fontSize: 18 }]}>録音完了</Text>
+            {sourceFileName && (
+              <Text style={[styles.progressFileName, { color: c.textMuted }]}>{sourceFileName}</Text>
+            )}
+            <View style={{ flexDirection: "row", gap: 12, marginTop: 16 }}>
+              <TouchableOpacity
+                style={[styles.actionButton, { backgroundColor: c.primary }]}
+                onPress={() => { haptics.mediumTap(); handleOpenTemplatePicker(); }}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="mic-outline" size={18} color="#fff" />
+                <Text style={[styles.actionButtonText, { color: "#fff" }]}>文字起こしする</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.actionButton, { backgroundColor: c.surfaceSecondary }]}
+                onPress={() => { haptics.lightTap(); handleSaveForLater(); }}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.actionButtonText, { color: c.textPrimary }]}>後でやる</Text>
+              </TouchableOpacity>
+            </View>
+          </BounceInView>
+        )}
       </View>
 
-      {/* Bottom controls (recording/paused only) */}
       {(recState === "recording" || recState === "paused") && (
-        <View style={styles.controls}>
-          {recState === "recording" ? (
-            <TouchableOpacity style={styles.controlButton} onPress={handlePause}>
-              <View style={styles.pauseIcon} />
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity style={styles.controlButton} onPress={handleResume}>
-              <View style={styles.resumeIcon} />
-            </TouchableOpacity>
-          )}
+        <View style={[styles.controls, { backgroundColor: c.surface, borderTopColor: c.divider }]}>
+          <TouchableOpacity
+            style={[styles.controlButton, { backgroundColor: c.surfaceSecondary }]}
+            onPress={recState === "recording" ? handlePause : handleResume}
+          >
+            <Ionicons
+              name={recState === "recording" ? "pause" : "play"}
+              size={24}
+              color={c.textPrimary}
+            />
+          </TouchableOpacity>
 
-          <TouchableOpacity style={styles.stopButton} onPress={handleStop}>
+          <TouchableOpacity
+            style={[styles.stopButton, { backgroundColor: c.error }]}
+            onPress={handleStop}
+          >
             <View style={styles.stopIcon} />
           </TouchableOpacity>
         </View>
       )}
+      {/* ─── テンプレート選択モーダル ─── */}
+      <Modal
+        visible={showTemplatePicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowTemplatePicker(false)}
+      >
+        <TouchableOpacity
+          style={[styles.modalOverlay, { backgroundColor: c.overlay }]}
+          activeOpacity={1}
+          onPress={() => setShowTemplatePicker(false)}
+        >
+          <TouchableOpacity activeOpacity={1} onPress={() => {}} style={[styles.tplModalContent, { backgroundColor: c.surface }]}>
+            <View style={[styles.tplModalHeader, { borderBottomColor: c.divider }]}>
+              <Text style={[styles.tplModalTitle, { color: c.textPrimary }]}>テンプレートを選択</Text>
+              <TouchableOpacity onPress={() => setShowTemplatePicker(false)}>
+                <Text style={[styles.tplModalClose, { color: c.primary }]}>閉じる</Text>
+              </TouchableOpacity>
+            </View>
+
+            {templatesLoading ? (
+              <View style={styles.tplLoading}>
+                <ActivityIndicator size="large" color={c.primary} />
+              </View>
+            ) : (
+              <ScrollView style={styles.tplList}>
+                {/* テンプレートを使わない */}
+                <TouchableOpacity
+                  style={[
+                    styles.tplOption,
+                    { borderBottomColor: c.divider },
+                    selectedTemplateId === null && { backgroundColor: c.primaryBg },
+                  ]}
+                  onPress={() => setSelectedTemplateId(null)}
+                >
+                  <Ionicons
+                    name={selectedTemplateId === null ? "radio-button-on" : "radio-button-off"}
+                    size={20}
+                    color={selectedTemplateId === null ? c.primary : c.textMuted}
+                  />
+                  <View style={styles.tplOptionBody}>
+                    <Text style={[styles.tplOptionName, { color: c.textPrimary }]}>
+                      テンプレートを使わない
+                    </Text>
+                    <Text style={[styles.tplOptionDesc, { color: c.textMuted }]}>
+                      素の文字起こし結果をそのまま議事録として作成
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+
+                {templates.length === 0 && (
+                  <View style={styles.tplEmpty}>
+                    <Ionicons name="document-text-outline" size={40} color={c.textMuted} />
+                    <Text style={[styles.tplEmptyText, { color: c.textMuted }]}>
+                      テンプレートがありません
+                    </Text>
+                    <Text style={[styles.tplEmptySub, { color: c.textMuted }]}>
+                      設定画面から作成できます
+                    </Text>
+                  </View>
+                )}
+
+                {templates.map((tpl) => (
+                  <TouchableOpacity
+                    key={tpl.id}
+                    style={[
+                      styles.tplOption,
+                      { borderBottomColor: c.divider },
+                      selectedTemplateId === tpl.id && { backgroundColor: c.primaryBg },
+                    ]}
+                    onPress={() => setSelectedTemplateId(tpl.id)}
+                  >
+                    <Ionicons
+                      name={selectedTemplateId === tpl.id ? "radio-button-on" : "radio-button-off"}
+                      size={20}
+                      color={selectedTemplateId === tpl.id ? c.primary : c.textMuted}
+                    />
+                    <View style={styles.tplOptionBody}>
+                      <View style={styles.tplOptionTitleRow}>
+                        <Text style={[styles.tplOptionName, { color: c.textPrimary }]} numberOfLines={1}>
+                          {tpl.name}
+                        </Text>
+                        {tpl.is_default && (
+                          <View style={[styles.tplBadge, { backgroundColor: c.primaryBg }]}>
+                            <Text style={[styles.tplBadgeText, { color: c.primary }]}>デフォルト</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={[styles.tplOptionPreview, { color: c.textSecondary }]} numberOfLines={2}>
+                        {tpl.content}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+
+            <View style={[styles.tplModalFooter, { borderTopColor: c.divider }]}>
+              <TouchableOpacity
+                style={[styles.tplStartButton, { backgroundColor: c.primary, opacity: templatesLoading ? 0.5 : 1 }]}
+                onPress={handleStartTranscription}
+                disabled={templatesLoading}
+              >
+                <Ionicons name="mic-outline" size={18} color="#fff" />
+                <Text style={styles.tplStartButtonText}>文字起こしを開始</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-async function getFileSizeExpo(uri: string): Promise<number> {
-  try {
-    const FS = await import("expo-file-system");
-    const info = await FS.default.getInfoAsync(uri);
-    return "size" in info ? (info.size ?? 0) : 0;
-  } catch {
-    return 0;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Styles
-// ---------------------------------------------------------------------------
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#121212",
   },
   header: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 24,
-    paddingTop: 16,
+    justifyContent: "space-between",
+    paddingHorizontal: 8,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+  },
+  headerBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 4,
+    paddingHorizontal: 4,
   },
   cancel: {
-    fontSize: 16,
-    color: "#ef4444",
-    fontWeight: "500",
+    fontSize: 15,
   },
   title: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: "600",
-    color: "#ffffff",
   },
   content: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    paddingBottom: 100,
   },
   idleContent: {
     alignItems: "center",
-    gap: 16,
+  },
+  recordButtonWrapper: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: 140,
+    height: 140,
+  },
+  glowRing: {
+    position: "absolute",
+    width: 140,
+    height: 140,
+    borderRadius: 70,
   },
   bigRecordOuter: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: "#ef4444",
+    width: 120,
+    height: 120,
+    borderRadius: 60,
     justifyContent: "center",
     alignItems: "center",
-    shadowColor: "#ef4444",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
     elevation: 8,
   },
   bigRecordInner: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: "#dc2626",
+    width: 88,
+    height: 88,
+    borderRadius: 44,
     justifyContent: "center",
     alignItems: "center",
   },
-  recordDot: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "#ffffff",
-  },
   tapToRecord: {
-    fontSize: 15,
-    color: "#a1a1aa",
-    fontWeight: "500",
-    marginTop: 4,
+    fontSize: 18,
+    fontWeight: "700",
+    marginTop: 20,
+  },
+  tapSubtext: {
+    fontSize: 13,
+    marginTop: 6,
   },
   importButton: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: "#1e1e1e",
-    paddingVertical: 14,
-    paddingHorizontal: 28,
-    borderRadius: 12,
+    marginTop: 32,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: BorderRadius.full,
     borderWidth: 1,
-    borderColor: "#333333",
-    borderStyle: "dashed",
-    marginTop: 24,
-  },
-  importIcon: {
-    fontSize: 20,
   },
   importText: {
-    fontSize: 15,
-    color: "#a1a1aa",
+    fontSize: 14,
     fontWeight: "500",
   },
-  recordingIndicator: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "#ef4444",
+  recordingContainer: {
+    flex: 1,
+    width: "100%",
+  },
+  effectLayer: {
+    ...StyleSheet.absoluteFillObject,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 12,
   },
-  recordingDot: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: "#ef4444",
+  timerContainer: {
+    alignItems: "center",
+    paddingBottom: 10,
   },
   timer: {
-    fontSize: 72,
-    fontWeight: "200",
-    color: "#ffffff",
+    fontSize: 48,
+    fontWeight: "300",
     fontVariant: ["tabular-nums"],
-    marginBottom: 16,
+    letterSpacing: 2,
+  },
+  pausedBadge: {
+    marginTop: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  pausedText: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  processingContainer: {
+    alignItems: "center",
   },
   controls: {
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    paddingBottom: 48,
-    gap: 40,
+    gap: 28,
+    paddingVertical: 20,
+    paddingBottom: 28,
+    borderTopWidth: 1,
   },
   controlButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: "#2a2a2a",
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     justifyContent: "center",
     alignItems: "center",
-  },
-  pauseIcon: {
-    width: 18,
-    height: 18,
-    borderLeftWidth: 6,
-    borderRightWidth: 6,
-    borderColor: "#ffffff",
-  },
-  resumeIcon: {
-    width: 0,
-    height: 0,
-    borderLeftWidth: 18,
-    borderTopWidth: 11,
-    borderBottomWidth: 11,
-    borderLeftColor: "#ffffff",
-    borderTopColor: "transparent",
-    borderBottomColor: "transparent",
-    marginLeft: 4,
   },
   stopButton: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: "#ef4444",
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     justifyContent: "center",
     alignItems: "center",
+    shadowColor: "#EF4444",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   stopIcon: {
-    width: 22,
-    height: 22,
+    width: 18,
+    height: 18,
     borderRadius: 4,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#fff",
   },
-  disabled: {
-    opacity: 0.4,
-  },
-
-  // --- Progress overlay ---
-  progressContainer: {
+  progressCard: {
     alignItems: "center",
     gap: 8,
+    marginTop: 24,
     paddingHorizontal: 32,
-  },
-  progressIcon: {
-    fontSize: 32,
-    marginBottom: 4,
+    paddingVertical: 24,
+    borderRadius: BorderRadius.lg,
+    width: SCREEN_WIDTH * 0.8,
   },
   progressText: {
-    fontSize: 16,
-    color: "#d4d4d8",
+    fontSize: 14,
+    fontWeight: "600",
+    textAlign: "center",
+    paddingHorizontal: 8,
+  },
+  progressPercent: {
+    fontSize: 28,
+    fontWeight: "700",
+    fontVariant: ["tabular-nums"],
+  },
+  progressIndeterminate: {
+    fontSize: 15,
+    fontWeight: "500",
+    marginTop: 4,
+  },
+  progressSub: {
+    fontSize: 12,
+  },
+  progressFileName: {
+    fontSize: 12,
     fontWeight: "500",
     textAlign: "center",
   },
+  tipBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  tipText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: "500",
+    lineHeight: 16,
+  },
   progressBarBg: {
     width: "100%",
-    height: 4,
-    backgroundColor: "#2a2a2a",
-    borderRadius: 2,
-    marginTop: 8,
+    height: 6,
+    borderRadius: 3,
     overflow: "hidden",
+    marginTop: 4,
   },
   progressBarFill: {
     height: "100%",
-    backgroundColor: "#22c55e",
-    borderRadius: 2,
+    borderRadius: 3,
   },
-  actionButton: {
-    backgroundColor: "#22c55e",
-    paddingVertical: 12,
-    paddingHorizontal: 32,
-    borderRadius: 12,
-    marginTop: 8,
-  },
-  actionButtonText: {
-    color: "#ffffff",
-    fontSize: 16,
-    fontWeight: "600",
+  completedCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 4,
   },
   errorDetail: {
     fontSize: 13,
-    color: "#a1a1aa",
     textAlign: "center",
-    marginTop: 4,
+    paddingHorizontal: 16,
   },
   errorActions: {
     flexDirection: "row",
     gap: 12,
-    marginTop: 12,
+    marginTop: 8,
   },
   errorButton: {
-    backgroundColor: "#ef4444",
+    paddingHorizontal: 20,
     paddingVertical: 10,
-    paddingHorizontal: 24,
     borderRadius: 10,
   },
-  errorButtonSecondary: {
-    backgroundColor: "transparent",
-    borderWidth: 1,
-    borderColor: "#3f3f46",
-  },
   errorButtonText: {
-    color: "#ffffff",
     fontSize: 14,
     fontWeight: "600",
   },
-  errorButtonTextSecondary: {
-    color: "#a1a1aa",
+  actionButton: {
+    marginTop: 8,
+    paddingHorizontal: 28,
+    paddingVertical: 13,
+    borderRadius: BorderRadius.md,
+  },
+  actionButtonText: {
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  disabled: {
+    opacity: 0.5,
+  },
+
+  // ── Template Picker Modal ──
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  tplModalContent: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: "70%",
+    paddingBottom: 32,
+  },
+  tplModalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+  },
+  tplModalTitle: { fontSize: 17, fontWeight: "600" },
+  tplModalClose: { fontSize: 16, fontWeight: "500" },
+  tplLoading: {
+    paddingVertical: 48,
+    alignItems: "center",
+  },
+  tplList: {
+    maxHeight: 320,
+  },
+  tplOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+  },
+  tplOptionBody: {
+    flex: 1,
+    gap: 2,
+  },
+  tplOptionTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  tplOptionName: {
+    fontSize: 15,
+    fontWeight: "600",
+    flexShrink: 1,
+  },
+  tplOptionDesc: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  tplOptionPreview: {
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 2,
+  },
+  tplBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  tplBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  tplEmpty: {
+    alignItems: "center",
+    paddingVertical: 32,
+    gap: 4,
+  },
+  tplEmptyText: {
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  tplEmptySub: {
+    fontSize: 12,
+  },
+  tplModalFooter: {
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    borderTopWidth: 1,
+  },
+  tplStartButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 12,
+  },
+  tplStartButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "700",
   },
 });

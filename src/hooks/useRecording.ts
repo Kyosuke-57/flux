@@ -96,7 +96,7 @@ export function useRecording() {
 
       setPipelineState("transcribing");
 
-      const recordingId = crypto.randomUUID?.() ?? `${Date.now()}`;
+      const recordingId = `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 
       const jobId = await startTranscription({
         r2Key,
@@ -156,12 +156,12 @@ export function useRecording() {
   };
 }
 
-/** ファイルのサイズを取得（簡易版） */
+/** ファイルのサイズを取得 */
 async function getFileSize(uri: string): Promise<number> {
   try {
-    const FileSystem = await import("expo-file-system");
-    const info = await FileSystem.default.getInfoAsync(uri);
-    return "size" in info ? (info.size ?? 0) : 0;
+    const { File } = await import("expo-file-system");
+    const file = new File(uri);
+    return file.info().size ?? 0;
   } catch {
     return 0;
   }

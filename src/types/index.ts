@@ -21,11 +21,23 @@ export interface Minute {
   id: string;
   user_id: string;
   recording_id?: string;
+  recording_path?: string;
   title: string;
   content: string;
   original_transcript?: string;
+  corrected_transcript?: string;
   tags: string[];
   template_id?: string;
+  folder_id?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Folder {
+  id: string;
+  user_id: string;
+  name: string;
+  color?: string;
   created_at: string;
   updated_at: string;
 }
@@ -50,7 +62,7 @@ export interface Template {
 export type SubscriptionPlan = "free" | "pro" | "byok";
 
 export const PLAN_LIMITS: Record<SubscriptionPlan, number> = {
-  free: 600, // 10 minutes in seconds
-  pro: 7200, // 2 hours (120 minutes) in seconds
-  byok: 7200, // 2 hours (120 minutes) in seconds
+  free: Infinity, // 無制限（テスト中）
+  pro: Infinity,
+  byok: Infinity,
 };
