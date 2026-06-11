@@ -119,9 +119,26 @@ export async function checkUsageLimit(): Promise<{ allowed: boolean; error: Erro
 
 /**
  * Resets monthly_usage_seconds for all users.
- * Intended to be called periodically (e.g. via a cron job).
+ *
+ * ⚠️ この関数は管理者専用のサーバーサイド関数（cron job）で呼び出すべきです。
+ * クライアントからの呼び出しは RLS ポリシーで制限してください。
+ * 現在は認証チェックのみ行っています。
  */
 export async function resetMonthlyUsage() {
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    return { data: null, error: authError ?? new Error("認証されていません") };
+  }
+
+  // TODO: 管理者ロールのチェックを追加する
+  // 例: const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+
+  console.warn("resetMonthlyUsage: クライアントからの月次リセットは推奨されません。サーバーサイドの cron job を使用してください。");
+
   const { data, error } = await supabase
     .from("users")
     .update({ monthly_usage_seconds: 0 })
@@ -131,33 +148,23 @@ export async function resetMonthlyUsage() {
 }
 
 /**
- * Placeholder: RevenueCat SDK integration for managing entitlements.
- * Replace with actual RevenueCat calls when the SDK is configured.
+ * STUB: RevenueCat SDK integration for managing entitlements.
+ *
+ * ⚠️ この関数はスタブです。実際の実装に置き換えてください。
+ * 本番環境では RevenueCat SDK を設定し、この関数を置き換える必要があります。
  */
 export async function getRevenueCatEntitlements() {
-  // TODO: Integrate RevenueCat SDK
-  // Example:
-  //   import Purchases from 'react-native-purchases';
-  //   const offerings = await Purchases.getOfferings();
-  //   return offerings.current;
-  console.warn("RevenueCat SDK not yet configured — returning stub.");
+  console.warn("STUB: RevenueCat SDK not yet configured — returning stub.");
   return { entitlements: null };
 }
 
 /**
- * Placeholder: Creates a Stripe checkout session for upgrading/downgrading plans.
- * Replace with actual Stripe server call when the backend endpoint is ready.
+ * STUB: Creates a Stripe checkout session for upgrading/downgrading plans.
+ *
+ * ⚠️ この関数はスタブです。実際の実装に置き換えてください。
+ * 本番環境ではサーバーサイドの Stripe Checkout Session 作成エンドポイントと連携する必要があります。
  */
 export async function createStripeCheckoutSession(plan: SubscriptionPlan) {
-  // TODO: Call backend endpoint to create Stripe Checkout Session
-  // Example:
-  //   const response = await fetch('/api/create-checkout-session', {
-  //     method: 'POST',
-  //     headers: { 'Content-Type': 'application/json' },
-  //     body: JSON.stringify({ plan, userId: (await supabase.auth.getUser()).data.user?.id }),
-  //   });
-  //   const session = await response.json();
-  //   return session;
-  console.warn("Stripe integration not yet configured — returning stub.", { plan });
+  console.warn("STUB: Stripe integration not yet configured — returning stub.", { plan });
   return { sessionUrl: null, error: new Error("Stripe checkout not configured") };
 }

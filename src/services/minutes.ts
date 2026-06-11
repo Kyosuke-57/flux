@@ -94,7 +94,7 @@ export async function createMinute(
  */
 export async function updateMinute(
   id: string,
-  updates: Partial<Pick<Minute, "title" | "content" | "tags" | "template_id">>
+  updates: Partial<Pick<Minute, "title" | "content" | "tags" | "template_id" | "original_transcript">>
 ): Promise<{ data: Minute | null; error: any }> {
   const {
     data: { user },

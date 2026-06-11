@@ -13,8 +13,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
-import { Paths } from "expo-file-system";
-import { File } from "expo-file-system";
+import { Paths, File } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import { getMinute, createMinute, updateMinute, deleteMinute } from "../../src/services/minutes";
 import { getAllTemplates } from "../../src/services/templates";

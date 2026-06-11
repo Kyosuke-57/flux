@@ -23,6 +23,7 @@ export interface Minute {
   recording_id?: string;
   title: string;
   content: string;
+  original_transcript?: string;
   tags: string[];
   template_id?: string;
   created_at: string;
@@ -50,6 +51,6 @@ export type SubscriptionPlan = "free" | "pro" | "byok";
 
 export const PLAN_LIMITS: Record<SubscriptionPlan, number> = {
   free: 600, // 10 minutes in seconds
-  pro: Infinity,
-  byok: Infinity,
+  pro: 7200, // 2 hours (120 minutes) in seconds
+  byok: 7200, // 2 hours (120 minutes) in seconds
 };

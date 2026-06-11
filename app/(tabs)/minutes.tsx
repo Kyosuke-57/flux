@@ -76,10 +76,9 @@ export default function MinutesScreen() {
       : stripped;
   };
 
-  const getTagName = (tagId: string) => {
-    const found = tags.find((t) => t.id === tagId);
-    return found ? found.name : tagId;
-  };
+  // Minute.tags はタグ名（string）の配列として保存される
+  // タグ名をそのまま表示する
+  const getTagName = (tagName: string) => tagName;
 
   if (loading) {
     return (
