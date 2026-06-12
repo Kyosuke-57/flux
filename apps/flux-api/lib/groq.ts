@@ -191,11 +191,31 @@ export interface MinutesGenerationResult {
 
 /**
  * 文字起こしテキストから構造化された議事録を生成
+ * @param transcript 文字起こしテキスト
+ * @param templateContent テンプレート内容（任意）— 出力フォーマットの指示として使う
  */
 export const generateMinutesFromTranscript = async (
   transcript: string,
+  templateContent?: string,
 ): Promise<MinutesGenerationResult> => {
-  const prompt = MINUTES_GENERATION_SYSTEM_PROMPT.replace("{transcript}", transcript);
+  let systemPrompt = MINUTES_GENERATION_SYSTEM_PROMPT;
+
+  // テンプレートが指定されていれば、出力形式の指示として上書き
+  if (templateContent) {
+    systemPrompt = `あなたは会議の文字起こしから構造化された議事録を生成するアシスタントです。
+
+以下の文字起こしを元に、日本語で議事録を作成してください。
+
+【テンプレート指示】
+以下の形式に従って議事録を生成してください：
+${templateContent}
+
+---
+【文字起こし】
+{transcript}`;
+  }
+
+  const prompt = systemPrompt.replace("{transcript}", transcript);
 
   const res = await fetch(OPENCODE_GO_API_URL, {
     method: "POST",

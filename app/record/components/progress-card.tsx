@@ -1,30 +1,19 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { BounceInView, FadeInView } from "../../../src/animations";
 import { BorderRadius } from "../../../src/theme";
 import { UploadingIcon } from "./uploading-icon";
 import { AnimatedHourglass } from "./animated-hourglass";
+import { LiveTranscript } from "./live-transcript";
 import type { ColorsLight } from "../../../src/theme";
 import type { PipelineState } from "../../../src/hooks/usePipeline";
-
-const TIPS = [
-  "タグを活用すると議事録をテーマ別に整理できます",
-  "フォルダでプロジェクトや月別に分類できます",
-  "テンプレートを使えば議事録の書式を統一できます",
-  "文字起こし後、補正文を編集して見やすくできます",
-  "ダークモードは設定から切り替えられます",
-  "録音ファイルは自動でクラウドにアップロードされます",
-  "作成した議事録はテキストやMarkdownで書き出せます",
-  "最近の議事録はホーム画面からすぐにアクセスできます",
-  "長押しで議事録の複製や削除ができます",
-  "録音品質は設定画面で変更できます",
-];
 
 type TranscriptionProgressData = {
   completedChunks?: number;
   totalChunks?: number;
   progressDetail?: string;
+  transcript?: string;
   status?: string;
   minuteId?: string;
   errorMessage?: string;
@@ -57,16 +46,6 @@ export function ProgressCard({
   celebration,
   color,
 }: Props) {
-  // TIPS のローテーション
-  const [currentTipIndex, setCurrentTipIndex] = useState(0);
-  useEffect(() => {
-    if (status !== "transcribing") return;
-    const tipTimer = setInterval(() => {
-      setCurrentTipIndex((prev) => (prev + 1) % TIPS.length);
-    }, 6000);
-    return () => clearInterval(tipTimer);
-  }, [status]);
-
   if (status === "idle") return null;
 
   switch (status) {
@@ -106,54 +85,105 @@ export function ProgressCard({
         ? Math.round((tp.completedChunks! / tp.totalChunks!) * 100)
         : 0;
       const isIndeterminate = !hasChunks || pct === 0;
+      const transcriptText = tp?.transcript ?? "";
 
       return (
-        <BounceInView key="transcribing" style={styles.card}>
-          <AnimatedHourglass
-            color={color.primary}
-            isDeterminate={!isIndeterminate}
-          />
-          <Text style={[styles.text, { color: color.textPrimary }]}>
-            {tp?.progressDetail ?? "文字起こし中..."}
-          </Text>
+        <BounceInView
+          key="transcribing"
+          style={[
+            styles.card,
+            {
+              width: "90%",
+              maxHeight: 500,
+              backgroundColor: color.surface,
+              borderRadius: BorderRadius.lg,
+              padding: 16,
+              borderWidth: 1,
+              borderColor: color.cardBorder,
+            },
+          ]}
+        >
+          {/* ヘッダー行 */}
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <AnimatedHourglass
+              color={color.primary}
+              isDeterminate={!isIndeterminate}
+            />
+            <Text
+              style={{
+                fontSize: 14,
+                fontWeight: "600",
+                color: color.textPrimary,
+                flex: 1,
+              }}
+            >
+              文字起こし中...
+            </Text>
+          </View>
           {sourceFileName && (
-            <Text style={[styles.fileName, { color: color.textMuted }]}>
+            <Text style={{ fontSize: 12, color: color.textMuted }}>
               {sourceFileName}
             </Text>
           )}
+
+          {/* ライブトランスクリプト */}
+          <LiveTranscript transcript={transcriptText} color={color} />
+
+          {/* 進捗セクション */}
           {isIndeterminate ? (
-            <Text style={[styles.indeterminate, { color: color.textMuted }]}>
+            <Text
+              style={{
+                fontSize: 14,
+                color: color.textMuted,
+                textAlign: "center",
+                marginTop: 8,
+              }}
+            >
               準備中...
             </Text>
           ) : (
             <>
-              <Text style={[styles.percent, { color: color.primary }]}>
+              <Text
+                style={{
+                  fontSize: 24,
+                  fontWeight: "700",
+                  color: color.primary,
+                  textAlign: "center",
+                  marginTop: 4,
+                }}
+              >
                 {pct}%
               </Text>
-              <View style={[styles.barBg, { backgroundColor: color.border }]}>
+              <View
+                style={{
+                  height: 6,
+                  backgroundColor: color.border,
+                  borderRadius: 3,
+                  overflow: "hidden",
+                  marginTop: 4,
+                }}
+              >
                 <View
-                  style={[
-                    styles.barFill,
-                    {
-                      backgroundColor: color.primary,
-                      width: `${pct}%` as any,
-                    },
-                  ]}
+                  style={{
+                    height: "100%",
+                    backgroundColor: color.primary,
+                    borderRadius: 3,
+                    width: `${pct}%` as any,
+                  }}
                 />
               </View>
+              <Text
+                style={{
+                  fontSize: 12,
+                  color: color.textMuted,
+                  textAlign: "center",
+                  marginTop: 4,
+                }}
+              >
+                {tp.completedChunks}/{tp.totalChunks} チャンク
+              </Text>
             </>
           )}
-          {tp?.completedChunks != null && tp?.totalChunks != null && (
-            <Text style={[styles.sub, { color: color.textMuted }]}>
-              {tp.completedChunks}/{tp.totalChunks} チャンク
-            </Text>
-          )}
-          <View style={[styles.tipBox, { backgroundColor: color.primaryBg }]}>
-            <Ionicons name="bulb-outline" size={14} color={color.primary} />
-            <Text style={[styles.tipText, { color: color.primary }]}>
-              {TIPS[currentTipIndex]}
-            </Text>
-          </View>
         </BounceInView>
       );
     }
@@ -290,28 +320,10 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     marginTop: 4,
   },
-  sub: {
-    fontSize: 12,
-  },
   fileName: {
     fontSize: 12,
     fontWeight: "500",
     textAlign: "center",
-  },
-  tipBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginTop: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  tipText: {
-    flex: 1,
-    fontSize: 12,
-    fontWeight: "500",
-    lineHeight: 16,
   },
   barBg: {
     width: "100%",

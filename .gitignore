@@ -44,3 +44,8 @@ yarn-error.*
 .opencode.json
 netcheck*.ps1
 apps/otoroku-api/.next/
+
+# tool config dirs
+.hermes/
+.omo/
+.playwright-mcp/

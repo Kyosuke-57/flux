@@ -44,8 +44,9 @@ export async function POST(req: NextRequest) {
       fileSize?: number;
       fileName?: string;
       generationMode?: "auto" | "manual";
+      templateContent?: string;
     };
-    const { r2Key, recordingId, fileSize, fileName, generationMode } = body;
+    const { r2Key, recordingId, fileSize, fileName, generationMode, templateContent } = body;
     if (!r2Key || !recordingId) {
       return NextResponse.json(
         { error: "r2Key, recordingId は必須です" },
@@ -141,7 +142,7 @@ export async function POST(req: NextRequest) {
     if (generationMode === "auto") {
       // ---- 自動議事録生成（文字起こし完了後、即座に議事録を作成） ----
       try {
-        const minutesResult = await generateMinutesFromTranscript(refinedTranscript);
+        const minutesResult = await generateMinutesFromTranscript(refinedTranscript, templateContent);
 
         const { data: newMinute, error: minuteError } = await supabase
           .from("minutes")
