@@ -45,12 +45,21 @@
       "package": "com.fluxapp.app",
       "permissions": [
         "RECORD_AUDIO",
-        "READ_EXTERNAL_STORAGE"
+        "READ_EXTERNAL_STORAGE",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
       ]
     },
     "web": {
       "bundler": "metro",
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "ce55a60d-291f-44f1-82b0-d37b4b5763bb"
+      }
+    },
+    "owner": "kyo-right"
   }
 }
