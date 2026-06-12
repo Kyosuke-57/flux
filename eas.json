@@ -37,11 +37,6 @@
     "production": {
       "android": {
         "serviceAccountKeyPath": "./service-account-key.json"
-      },
-      "ios": {
-        "appleId": "",
-        "ascAppId": "",
-        "appleTeamId": ""
       }
     }
   }
