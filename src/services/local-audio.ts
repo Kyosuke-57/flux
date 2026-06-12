@@ -1,7 +1,4 @@
-import { Audio } from "expo-av";
 import { File, Directory, Paths } from "expo-file-system";
-
-let _sound: Audio.Sound | null = null;
 
 /**
  * 録音ファイルをアプリのドキュメントディレクトリに保存する
@@ -30,44 +27,3 @@ export async function saveRecordingLocally(
   return destFile.uri;
 }
 
-/**
- * ローカルの音声ファイルを再生する
- * @param uri 再生する音声ファイルの URI
- */
-export async function playLocalAudio(uri: string): Promise<void> {
-  if (_sound) {
-    await _sound.stopAsync();
-    await _sound.unloadAsync();
-    _sound = null;
-  }
-
-  await Audio.setAudioModeAsync({
-    playsInSilentModeIOS: true,
-    allowsRecordingIOS: false,
-  });
-
-  const { sound } = await Audio.Sound.createAsync(
-    { uri },
-    { shouldPlay: true },
-  );
-
-  _sound = sound;
-
-  sound.setOnPlaybackStatusUpdate((status) => {
-    if (status.isLoaded && status.didJustFinish) {
-      sound.unloadAsync();
-      _sound = null;
-    }
-  });
-}
-
-/**
- * 現在再生中の音声を停止する
- */
-export async function stopLocalAudio(): Promise<void> {
-  if (_sound) {
-    await _sound.stopAsync();
-    await _sound.unloadAsync();
-    _sound = null;
-  }
-}

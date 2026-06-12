@@ -32,7 +32,7 @@ function base64ToArrayBuffer(base64: string): ArrayBuffer {
  *
  * @param userId      - The authenticated user's ID.
  * @param recordingId - UUID of the recording (will be part of the storage path).
- * @param uri         - Local file URI of the audio recording (from expo-av or document picker).
+ * @param uri         - Local file URI of the audio recording (from expo-audio or document picker).
  * @returns The storage path on success, or null + error.
  */
 export async function uploadAudio(
