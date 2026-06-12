@@ -1,8 +1,0 @@
-{
-  "version": 1,
-  "functions": {
-    "/api/otoroku-status": {},
-    "/api/otoroku-transcribe": {},
-    "/api/otoroku-upload-url": {}
-  }
-}
