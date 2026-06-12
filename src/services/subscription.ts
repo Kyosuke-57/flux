@@ -1,4 +1,4 @@
-import { supabase } from "../lib/supabase";
+import { supabase, requireUser } from "../lib/supabase";
 import type { SubscriptionPlan } from "../types";
 import { PLAN_LIMITS } from "../types";
 
@@ -60,13 +60,8 @@ export const PLANS: PlanInfo[] = [
  * Falls back to free plan if the users table doesn't exist yet.
  */
 export async function getSubscriptionStatus() {
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-  if (authError || !user) {
-    return { data: null, error: authError ?? new Error("Not authenticated") };
-  }
+  const { user, error: authError } = await requireUser();
+  if (authError || !user) return { data: null, error: authError };
 
   const { data: userData, error: userError } = await supabase
     .from("users")
@@ -117,13 +112,8 @@ export async function getUsageRemaining(): Promise<{ remaining: number | null; e
  * Increments the current user's monthly_usage_seconds by the given amount.
  */
 export async function updateUsage(secondsToAdd: number) {
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-  if (authError || !user) {
-    return { data: null, error: authError ?? new Error("Not authenticated") };
-  }
+  const { user, error: authError } = await requireUser();
+  if (authError || !user) return { data: null, error: authError };
 
   const { data, error } = await supabase.rpc("increment_usage", {
     user_id: user.id,

@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "OTOROKU",
-    "slug": "otoroku",
+    "name": "FLUX",
+    "slug": "flux",
     "version": "1.0.0",
     "orientation": "portrait",
-    "scheme": "otoroku",
+    "scheme": "flux",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "splash": {
@@ -21,13 +21,16 @@
         }
       ],
       "expo-secure-store",
-      "expo-document-picker"
+      "expo-document-picker",
+      "expo-audio"
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.otoroku.app",
+      "bundleIdentifier": "com.fluxapp.app",
       "infoPlist": {
-        "UIBackgroundModes": ["audio"]
+        "UIBackgroundModes": [
+          "audio"
+        ]
       },
       "config": {
         "usesNonExemptEncryption": false
@@ -39,7 +42,7 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "backgroundColor": "#7C3AED"
       },
-      "package": "com.otoroku.app",
+      "package": "com.fluxapp.app",
       "permissions": [
         "RECORD_AUDIO",
         "READ_EXTERNAL_STORAGE"

@@ -1,7 +1,7 @@
 /**
  * Expo → R2 アップロードサービス（署名付きURL方式）
  *
- * 1. API サーバーに署名付きアップロードURLを要求（POST /api/otoroku-upload-url）
+ * 1. API サーバーに署名付きアップロードURLを要求（POST /api/flux-upload-url）
  * 2. 発行されたURLを使ってR2に直接アップロード（PUT）
  * 3. アップロード完了 → r2Key を返す
  *
@@ -43,7 +43,7 @@ export async function uploadToR2(
   }
 
   // 1. 署名付きアップロードURLを要求
-  const urlRes = await fetch(`${API_BASE_URL}/api/otoroku-upload-url`, {
+  const urlRes = await fetch(`${API_BASE_URL}/api/flux-upload-url`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,

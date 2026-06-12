@@ -1,14 +1,14 @@
 /**
- * 文字起こしサービス（otoroku-api + Supabase Realtime）
+ * 文字起こしサービス（flux-api + Supabase Realtime）
  *
- * 1. otoroku-api に文字起こしを依頼（POST /api/otoroku-transcribe）
+ * 1. flux-api に文字起こしを依頼（POST /api/flux-transcribe）
  * 2. Supabase Realtime で進捗を受信（transcription_jobs テーブルの変更）
  * 3. 完了 or フォールバック時にステータス確認
  */
 import { supabase } from "../lib/supabase";
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 
-// 開発中はローカル、本番は otoroku-api のデプロイ先URL
+// 開発中はローカル、本番は flux-api のデプロイ先URL
 const API_BASE_URL =
   process.env.EXPO_PUBLIC_OTOROKU_API_URL ?? "http://localhost:3000";
 
@@ -47,7 +47,7 @@ export async function startTranscription(params: {
     throw new Error("認証されていません。ログインしてください。");
   }
 
-  const res = await fetch(`${API_BASE_URL}/api/otoroku-transcribe`, {
+  const res = await fetch(`${API_BASE_URL}/api/flux-transcribe`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,

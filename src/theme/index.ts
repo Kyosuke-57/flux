@@ -45,7 +45,7 @@ export const ColorsLight = {
   tabBarBorder: "#F1F5F9",
 
   // Shadows
-  shadow: "#7C3AED",
+  shadow: "#0F172A",
 
   // Component-specific
   toggleBg: "#E2E8F0",
@@ -210,7 +210,7 @@ export const Shadows = {
     elevation: 8,
   },
   glass: {
-    shadowColor: "#7C3AED",
+    shadowColor: Colors.shadow,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.15,
     shadowRadius: 24,

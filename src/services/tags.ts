@@ -1,4 +1,4 @@
-import { supabase } from "../lib/supabase";
+import { supabase, requireUser } from "../lib/supabase";
 import type { Tag } from "../types";
 
 /**
@@ -6,14 +6,8 @@ import type { Tag } from "../types";
  * Returns tags sorted alphabetically by name.
  */
 export async function getAllTags() {
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-
-  if (userError || !user) {
-    return { data: null, error: userError ?? new Error("Not authenticated") };
-  }
+  const { user, error: authError } = await requireUser();
+  if (authError || !user) return { data: null, error: authError };
 
   const { data, error } = await supabase
     .from("tags")
@@ -30,14 +24,8 @@ export async function getAllTags() {
  * @param color Optional hex colour string (e.g. "#ff0000")
  */
 export async function createTag(name: string, color?: string) {
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-
-  if (userError || !user) {
-    return { data: null, error: userError ?? new Error("Not authenticated") };
-  }
+  const { user, error: authError } = await requireUser();
+  if (authError || !user) return { data: null, error: authError };
 
   const { data, error } = await supabase
     .from("tags")
@@ -58,14 +46,8 @@ export async function updateTag(
   id: string,
   updates: Partial<Pick<Tag, "name" | "color">>,
 ) {
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-
-  if (userError || !user) {
-    return { data: null, error: userError ?? new Error("Not authenticated") };
-  }
+  const { user, error: authError } = await requireUser();
+  if (authError || !user) return { data: null, error: authError };
 
   const { data, error } = await supabase
     .from("tags")
@@ -84,14 +66,8 @@ export async function updateTag(
  * @param id Tag ID
  */
 export async function deleteTag(id: string) {
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-
-  if (userError || !user) {
-    return { error: userError ?? new Error("Not authenticated") };
-  }
+  const { user, error: authError } = await requireUser();
+  if (authError || !user) return { error: authError };
 
   const { error } = await supabase
     .from("tags")

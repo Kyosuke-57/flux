@@ -1,4 +1,4 @@
-import { supabase } from "../lib/supabase";
+import { supabase, requireUser } from "../lib/supabase";
 import type { Template } from "../types";
 
 /**
@@ -8,14 +8,8 @@ export async function getAllTemplates(): Promise<{
   data: Template[] | null;
   error: any;
 }> {
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    return { data: null, error: authError ?? new Error("Not authenticated") };
-  }
+  const { user, error: authError } = await requireUser();
+  if (authError || !user) return { data: null, error: authError };
 
   const { data, error } = await supabase
     .from("templates")
@@ -33,14 +27,8 @@ export async function getDefaultTemplate(): Promise<{
   data: Template | null;
   error: any;
 }> {
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    return { data: null, error: authError ?? new Error("Not authenticated") };
-  }
+  const { user, error: authError } = await requireUser();
+  if (authError || !user) return { data: null, error: authError };
 
   const { data, error } = await supabase
     .from("templates")
@@ -64,14 +52,8 @@ export async function createTemplate(
   content: string,
   is_default?: boolean
 ): Promise<{ data: Template | null; error: any }> {
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    return { data: null, error: authError ?? new Error("Not authenticated") };
-  }
+  const { user, error: authError } = await requireUser();
+  if (authError || !user) return { data: null, error: authError };
 
   const { data, error } = await supabase
     .from("templates")
@@ -97,14 +79,8 @@ export async function updateTemplate(
   id: string,
   updates: Partial<Pick<Template, "name" | "content" | "is_default">>
 ): Promise<{ data: Template | null; error: any }> {
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    return { data: null, error: authError ?? new Error("Not authenticated") };
-  }
+  const { user, error: authError } = await requireUser();
+  if (authError || !user) return { data: null, error: authError };
 
   const { data, error } = await supabase
     .from("templates")
@@ -123,14 +99,8 @@ export async function updateTemplate(
 export async function deleteTemplate(
   id: string
 ): Promise<{ data: Template | null; error: any }> {
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    return { data: null, error: authError ?? new Error("Not authenticated") };
-  }
+  const { user, error: authError } = await requireUser();
+  if (authError || !user) return { data: null, error: authError };
 
   const { data, error } = await supabase
     .from("templates")

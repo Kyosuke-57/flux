@@ -30,7 +30,7 @@ export async function signOut() {
  * リダイレクトURLは自動的に exp://* パターンで Supabase Auth に登録済み。
  *
  * 必要な設定（Supabase ダッシュボード → Authentication → URL Configuration）:
- * - Redirect URLs に登録済み: exp://*, com.otoroku.app://auth/callback
+ * - Redirect URLs に登録済み: exp://*, com.fluxapp.app://auth/callback
  * - Google Cloud Console で OAuth 同意画面とクライアントIDを設定
  */
 export async function signInWithGoogle() {

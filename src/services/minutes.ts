@@ -1,18 +1,12 @@
-import { supabase } from "../lib/supabase";
+import { supabase, requireUser } from "../lib/supabase";
 import type { Minute } from "../types";
 
 /**
  * Fetch all minutes for the current user, ordered by updated_at descending.
  */
 export async function getAllMinutes(): Promise<{ data: Minute[] | null; error: any }> {
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    return { data: null, error: authError ?? new Error("Not authenticated") };
-  }
+  const { user, error: authError } = await requireUser();
+  if (authError || !user) return { data: null, error: authError };
 
   const { data, error } = await supabase
     .from("minutes")
@@ -29,14 +23,8 @@ export async function getAllMinutes(): Promise<{ data: Minute[] | null; error: a
 export async function getMinute(
   id: string
 ): Promise<{ data: Minute | null; error: any }> {
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    return { data: null, error: authError ?? new Error("Not authenticated") };
-  }
+  const { user, error: authError } = await requireUser();
+  if (authError || !user) return { data: null, error: authError };
 
   const { data, error } = await supabase
     .from("minutes")
@@ -66,14 +54,8 @@ export async function createMinute(
   corrected_transcript?: string,
   recording_path?: string,
 ): Promise<{ data: Minute | null; error: any }> {
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    return { data: null, error: authError ?? new Error("Not authenticated") };
-  }
+  const { user, error: authError } = await requireUser();
+  if (authError || !user) return { data: null, error: authError };
 
   const { data, error } = await supabase
     .from("minutes")
@@ -126,14 +108,8 @@ export async function updateMinute(
   id: string,
   updates: Partial<Pick<Minute, "title" | "content" | "tags" | "template_id" | "folder_id" | "original_transcript" | "corrected_transcript" | "recording_path">>
 ): Promise<{ data: Minute | null; error: any }> {
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    return { data: null, error: authError ?? new Error("Not authenticated") };
-  }
+  const { user, error: authError } = await requireUser();
+  if (authError || !user) return { data: null, error: authError };
 
   const { data, error } = await supabase
     .from("minutes")
@@ -152,14 +128,8 @@ export async function updateMinute(
 export async function deleteMinute(
   id: string
 ): Promise<{ data: Minute | null; error: any }> {
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    return { data: null, error: authError ?? new Error("Not authenticated") };
-  }
+  const { user, error: authError } = await requireUser();
+  if (authError || !user) return { data: null, error: authError };
 
   const { data, error } = await supabase
     .from("minutes")
@@ -179,14 +149,8 @@ export async function deleteMinute(
 export async function searchMinutes(
   query: string
 ): Promise<{ data: Minute[] | null; error: any }> {
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    return { data: null, error: authError ?? new Error("Not authenticated") };
-  }
+  const { user, error: authError } = await requireUser();
+  if (authError || !user) return { data: null, error: authError };
 
   const { data, error } = await supabase
     .from("minutes")

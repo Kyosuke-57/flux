@@ -1,5 +1,5 @@
 /**
- * GET /api/otoroku-status
+ * GET /api/flux-status
  *
  * 文字起こしジョブの進捗を確認（Supabase Realtime のフォールバック用）。
  * Expo 側は基本的に Realtime で進捗を受け取るが、

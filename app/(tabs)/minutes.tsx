@@ -11,7 +11,7 @@ import { getAllMinutes, searchMinutes, deleteMinute, duplicateMinute } from "../
 import { getAllTags } from "../../src/services/tags";
 import { getAllFolders, createFolder } from "../../src/services/folders";
 import type { Minute, Tag, Folder } from "../../src/types";
-import { theme, Shadows } from "../../src/theme";
+import { theme, Spacing, BorderRadius } from "../../src/theme";
 import { useSettings } from "../../src/contexts/SettingsContext";
 import { useToast } from "../../src/contexts/ToastContext";
 import { SwipeableRow } from "../../src/animations/gestures";
@@ -735,9 +735,9 @@ const styles = StyleSheet.create({
   card: {
     marginHorizontal: 24,
     marginTop: 8,
-    padding: 14,
-    borderRadius: 12,
-    ...Shadows.md,
+    paddingVertical: 14,
+    paddingHorizontal: Spacing.lg,
+    borderRadius: BorderRadius.md,
   },
   cardTop: {
     flexDirection: "row",

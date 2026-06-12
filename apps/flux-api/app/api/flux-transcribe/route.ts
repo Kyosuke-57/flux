@@ -1,12 +1,12 @@
 /**
- * POST /api/otoroku-transcribe
+ * POST /api/flux-transcribe
  *
  * 文字起こしパイプラインのエントリポイント。
  * 1. R2 から音声ダウンロード
  * 2. FFmpeg で分割
  * 3. 各チャンクを Groq Whisper で文字起こし（429時 Exponential Backoff）
  * 4. 全チャンク完了 → OpenCode Go で補正
- * 5. 結果を otoroku Supabase に保存
+ * 5. 結果を flux Supabase に保存
  * 6. 完了/失敗時に R2 音声ファイルを自動削除
  *
  * Vercel Pro の 15分タイムアウト内で全処理を完了させる。
@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
     const fileBuffer = await getObject(r2Key);
 
     // ---- テンポラリディレクトリに保存 ----
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "otoroku-"));
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "flux-"));
     const ext = path.extname(fileName || ".m4a") || ".m4a";
     const inputPath = path.join(tempDir, `input${ext}`);
     await fs.writeFile(inputPath, fileBuffer);

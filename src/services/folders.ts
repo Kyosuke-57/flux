@@ -1,4 +1,4 @@
-import { supabase } from "../lib/supabase";
+import { supabase, requireUser } from "../lib/supabase";
 import type { Folder } from "../types";
 
 /**
@@ -6,14 +6,8 @@ import type { Folder } from "../types";
  * 名前順でソート
  */
 export async function getAllFolders() {
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-
-  if (userError || !user) {
-    return { data: null, error: userError ?? new Error("Not authenticated") };
-  }
+  const { user, error: authError } = await requireUser();
+  if (authError || !user) return { data: null, error: authError };
 
   const { data, error } = await supabase
     .from("folders")
@@ -29,14 +23,8 @@ export async function getAllFolders() {
  * @param name フォルダ名（必須）
  */
 export async function createFolder(name: string) {
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-
-  if (userError || !user) {
-    return { data: null, error: userError ?? new Error("Not authenticated") };
-  }
+  const { user, error: authError } = await requireUser();
+  if (authError || !user) return { data: null, error: authError };
 
   const { data, error } = await supabase
     .from("folders")
@@ -57,14 +45,8 @@ export async function updateFolder(
   id: string,
   updates: Partial<Pick<Folder, "name" | "color">>,
 ) {
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-
-  if (userError || !user) {
-    return { data: null, error: userError ?? new Error("Not authenticated") };
-  }
+  const { user, error: authError } = await requireUser();
+  if (authError || !user) return { data: null, error: authError };
 
   const { data, error } = await supabase
     .from("folders")
@@ -83,14 +65,8 @@ export async function updateFolder(
  * @param id フォルダID
  */
 export async function deleteFolder(id: string) {
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-
-  if (userError || !user) {
-    return { error: userError ?? new Error("Not authenticated") };
-  }
+  const { user, error: authError } = await requireUser();
+  if (authError || !user) return { error: authError };
 
   const { error } = await supabase
     .from("folders")

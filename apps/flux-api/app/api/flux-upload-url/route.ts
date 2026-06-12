@@ -1,5 +1,5 @@
 /**
- * GET /api/otoroku-upload-url
+ * GET /api/flux-upload-url
  *
  * R2 署名付きアップロードURLを発行。
  * Expo 側はこのURLを使って R2 に直接音声ファイルをアップロードする。
