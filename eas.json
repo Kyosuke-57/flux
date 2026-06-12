@@ -16,6 +16,11 @@
     },
     "preview": {
       "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://noagjjelimffuxsinvph.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_zyhRaHHzYZs3MYSX16vc2Q_TQkdY3FS",
+        "EXPO_PUBLIC_OTOROKU_API_URL": "https://otoroku.vercel.app"
+      },
       "android": {
         "buildType": "apk"
       },

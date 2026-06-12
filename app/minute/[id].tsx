@@ -339,7 +339,7 @@ export default function MinuteDetailScreen() {
       let uti: string;
 
       if (format === "pdf") {
-        const { Print } = await import("expo-print");
+        const { printToFileAsync } = await import("expo-print");
         const html = `
           <html>
           <head><meta charset="utf-8"><style>
@@ -358,7 +358,7 @@ export default function MinuteDetailScreen() {
           </body>
           </html>
         `;
-        const { uri } = await Print.printToFileAsync({ html });
+        const { uri } = await printToFileAsync({ html });
         fileUri = uri;
         mimeType = "application/pdf";
         uti = "com.adobe.pdf";

@@ -14,15 +14,14 @@
     },
     "plugins": [
       "expo-router",
-      [
-        "expo-av",
-        {
-          "microphonePermission": "録音のために $(PRODUCT_NAME) がマイクにアクセスすることを許可してください。"
-        }
-      ],
       "expo-secure-store",
       "expo-document-picker",
-      "expo-audio"
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "録音のために FLUX がマイクにアクセスすることを許可してください。"
+        }
+      ]
     ],
     "ios": {
       "supportsTablet": true,
