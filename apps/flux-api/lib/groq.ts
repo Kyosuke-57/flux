@@ -148,3 +148,107 @@ export const refineJapaneseTranscript = async (rawText: string): Promise<string>
   const data: any = await res.json();
   return data.choices?.[0]?.message?.content || rawText;
 };
+
+// ---------------------------------------------------------------------------
+// 議事録自動生成
+// ---------------------------------------------------------------------------
+
+const MINUTES_GENERATION_SYSTEM_PROMPT = `あなたは会議の文字起こしから構造化された議事録を生成するアシスタントです。
+
+以下の文字起こしを元に、日本語で議事録を作成してください。
+
+【出力形式】
+タイトル: [会議のタイトルを推定]
+
+# 議事録
+
+## 参加者（推定）
+[登場人物がいれば記載]
+
+## 議題
+[議題のリスト]
+
+## 議論内容
+[議論の詳細]
+
+## 決定事項
+[決定されたこと]
+
+## 次のアクション
+- [ ] タスク1（担当者: 名前）
+- [ ] タスク2（担当者: 名前）
+
+---
+【文字起こし】
+{transcript}`;
+
+export interface MinutesGenerationResult {
+  title: string;
+  content: string;
+  summary: string;
+  actionItems: string[];
+}
+
+/**
+ * 文字起こしテキストから構造化された議事録を生成
+ */
+export const generateMinutesFromTranscript = async (
+  transcript: string,
+): Promise<MinutesGenerationResult> => {
+  const prompt = MINUTES_GENERATION_SYSTEM_PROMPT.replace("{transcript}", transcript);
+
+  const res = await fetch(OPENCODE_GO_API_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.OPENCODE_GO_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "deepseek-v4-flash",
+      messages: [
+        { role: "system", content: "あなたは会議の文字起こしから構造化された議事録を生成するプロフェッショナルです。" },
+        { role: "user", content: prompt },
+      ],
+      stream: false,
+      thinking: { type: "disabled" },
+    }),
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text().catch(() => "");
+    throw new Error(`議事録生成API error: ${res.status} ${errorText}`);
+  }
+
+  const data: any = await res.json();
+  const rawContent = data.choices?.[0]?.message?.content || "";
+
+  return parseMinutesFromContent(rawContent, transcript);
+};
+
+/**
+ * LLMの出力から構造化データを抽出
+ */
+function parseMinutesFromContent(
+  content: string,
+  transcript: string,
+): MinutesGenerationResult {
+  // タイトルを抽出
+  const titleMatch = content.match(/タイトル:\s*(.+)/);
+  const title = titleMatch?.[1]?.trim() || "議事録";
+
+  // 本文全体（タイトル行を除く）
+  const bodyContent = content.replace(/タイトル:\s*.+(\n|$)/, "").trim();
+
+  // サマリー（先頭200文字程度を抽出）
+  const summary = bodyContent.slice(0, 200).replace(/\n/g, " ").trim() + (bodyContent.length > 200 ? "…" : "");
+
+  // アクションアイテムを抽出
+  const actionItems: string[] = [];
+  const actionRegex = /-\s*\[\s*[xX ]?\s*\]\s*(.+)/g;
+  let match;
+  while ((match = actionRegex.exec(content)) !== null) {
+    actionItems.push(match[1].trim());
+  }
+
+  return { title, content: bodyContent, summary, actionItems };
+}

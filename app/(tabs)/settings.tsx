@@ -247,6 +247,48 @@ export default function SettingsScreen() {
           </View>
         </View>
 
+        {/* ─── 議事録生成設定 ─── */}
+        <Text style={[styles.section, { color: c.textMuted }]}>議事録設定</Text>
+        <View style={[styles.card, { backgroundColor: c.surface, borderColor: c.cardBorder }]}>
+          <View style={styles.row}>
+            <Text style={[styles.rowText, { color: c.textPrimary }]}>議事録生成モード</Text>
+            <View style={[styles.toggleGroup, { backgroundColor: c.surfaceSecondary }]}>
+              {[
+                { label: "自動生成", value: "auto" },
+                { label: "手動編集", value: "manual" },
+              ].map((opt) => (
+                <TouchableOpacity
+                  key={opt.value}
+                  style={[
+                    styles.toggleOption,
+                    settings.minutesGenerationMode === opt.value && { backgroundColor: settings.isDarkMode ? "#334155" : "#fff", ...(settings.isDarkMode ? {} : { shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 2, elevation: 2 }) },
+                  ]}
+                  onPress={() => updateSetting("minutesGenerationMode", opt.value)}
+                >
+                  <Text
+                    style={[
+                      styles.toggleText,
+                      { color: c.textSecondary },
+                      settings.minutesGenerationMode === opt.value && { color: c.primary, fontWeight: "600" },
+                    ]}
+                  >
+                    {opt.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+          <View style={styles.divider} />
+          <View style={[styles.row, { flexDirection: "column", alignItems: "flex-start", paddingVertical: 8 }]}>
+            <Text style={[styles.hintText, { color: c.textMuted, fontSize: 12, lineHeight: 18 }]}>
+              自動生成: 録音→文字起こし→議事録作成まで一気に完了
+            </Text>
+            <Text style={[styles.hintText, { color: c.textMuted, fontSize: 12, lineHeight: 18 }]}>
+              手動編集: 文字起こし後、編集画面で確認してから保存
+            </Text>
+          </View>
+        </View>
+
         {/* ─── 試験的プラン切替 ─── */}
         <Text style={[styles.section, { color: c.textMuted }]}>試験設定</Text>
         <View style={[styles.card, { backgroundColor: c.surface, borderColor: c.cardBorder }]}>

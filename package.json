@@ -32,14 +32,21 @@
     "react-native-web": "^0.21.2"
   },
   "devDependencies": {
+    "@testing-library/jest-native": "^5.4.3",
+    "@testing-library/react-native": "^14.0.0",
     "@types/react": "~19.1.10",
-    "typescript": "~5.9.2"
+    "@vitejs/plugin-react": "^6.0.2",
+    "react-test-renderer": "^19.1.0",
+    "typescript": "~5.9.2",
+    "vitest": "^4.1.8"
   },
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "private": true
 }

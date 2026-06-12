@@ -1,11 +1,13 @@
 import React, { createContext, useContext, useState, useCallback } from "react";
 
 export type RecordingEffect = "ripple" | "waveform" | "pulse";
+export type MinutesGenerationMode = "auto" | "manual";
 
 export interface Settings {
   isDarkMode: boolean;
   recordingEffect: RecordingEffect;
   hapticsEnabled: boolean;
+  minutesGenerationMode: MinutesGenerationMode;
 }
 
 interface SettingsContextType {
@@ -17,6 +19,7 @@ const DEFAULT_SETTINGS: Settings = {
   isDarkMode: false,
   recordingEffect: "ripple",
   hapticsEnabled: true,
+  minutesGenerationMode: "manual",
 };
 
 const SettingsContext = createContext<SettingsContextType>({

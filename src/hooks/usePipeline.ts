@@ -11,6 +11,7 @@ export type PipelineState =
   | "recording"
   | "uploading"
   | "transcribing"
+  | "generating"
   | "completed"
   | "failed";
 
@@ -22,6 +23,7 @@ export function usePipeline() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [minuteId, setMinuteId] = useState<string | undefined>(undefined);
   const [elapsed, setElapsed] = useState(0);
+  const [generationMode, setGenerationMode] = useState<"auto" | "manual">("manual");
 
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -61,13 +63,14 @@ export function usePipeline() {
    * @param templateContent テンプレート内容（任意）
    */
   const startPipeline = useCallback(
-    async (uri: string, templateContent?: string) => {
+    async (uri: string, templateContent?: string, generationMode?: "auto" | "manual") => {
       try {
         setStatus("uploading");
         setUploadProgress(0);
         setErrorMessage(null);
         setTranscriptionProgress(null);
         setMinuteId(undefined);
+        setGenerationMode(generationMode || "manual");
         startTimer();
 
         const fileName = `recording_${Date.now()}.m4a`;
@@ -109,6 +112,7 @@ export function usePipeline() {
           fileSize,
           fileName,
           templateContent,
+          generationMode: generationMode,
         });
 
         // Realtime で進捗を購読
@@ -120,9 +124,13 @@ export function usePipeline() {
               setMinuteId(p.minuteId);
             }
             if (p.status === "completed") {
-              setStatus("completed");
-              stopTimer();
-              cleanupSubscription();
+              if (generationMode === "auto" && !p.minuteId) {
+                setStatus("generating");
+              } else {
+                setStatus("completed");
+                stopTimer();
+                cleanupSubscription();
+              }
             } else if (p.status === "failed") {
               setStatus("failed");
               setErrorMessage(p.errorMessage ?? "文字起こしに失敗しました");
@@ -172,6 +180,7 @@ export function usePipeline() {
     errorMessage,
     minuteId,
     elapsed,
+    generationMode,
     startPipeline,
     cancelPipeline,
     reset,

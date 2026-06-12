@@ -18,7 +18,7 @@ import os from "os";
 import { getUser } from "@/lib/api-auth";
 import { getObject, deleteObject } from "@/lib/r2";
 import { splitAudioFile, cleanupChunks } from "@/lib/split-audio";
-import { transcribeWithRetry, refineJapaneseTranscript } from "@/lib/groq";
+import { transcribeWithRetry, refineJapaneseTranscript, generateMinutesFromTranscript } from "@/lib/groq";
 import { createServiceRoleClient } from "@/lib/supabase";
 
 export const runtime = "nodejs";
@@ -43,8 +43,9 @@ export async function POST(req: NextRequest) {
       recordingId: string;
       fileSize?: number;
       fileName?: string;
+      generationMode?: "auto" | "manual";
     };
-    const { r2Key, recordingId, fileSize, fileName } = body;
+    const { r2Key, recordingId, fileSize, fileName, generationMode } = body;
     if (!r2Key || !recordingId) {
       return NextResponse.json(
         { error: "r2Key, recordingId は必須です" },
@@ -135,14 +136,50 @@ export async function POST(req: NextRequest) {
       console.error("補正スキップ:", refineError);
     }
 
+    let minuteId: string | undefined;
+
+    if (generationMode === "auto") {
+      // ---- 自動議事録生成（文字起こし完了後、即座に議事録を作成） ----
+      try {
+        const minutesResult = await generateMinutesFromTranscript(refinedTranscript);
+
+        const { data: newMinute, error: minuteError } = await supabase
+          .from("minutes")
+          .insert({
+            title: minutesResult.title,
+            content: minutesResult.content,
+            original_transcript: fullTranscript,
+            corrected_transcript: refinedTranscript,
+            summary: minutesResult.summary,
+            recording_id: recordingId,
+            user_id: user.id,
+          })
+          .select("id")
+          .single();
+
+        if (minuteError || !newMinute) {
+          console.error("議事録保存失敗:", minuteError);
+        } else {
+          minuteId = newMinute.id;
+        }
+      } catch (genError) {
+        // 議事録生成が失敗しても文字起こし結果は使える
+        console.error("議事録自動生成スキップ:", genError);
+      }
+    }
+
     // ---- 完了を DB に保存 ----
+    const finalUpdate: any = {
+      status: "completed",
+      transcript: refinedTranscript,
+      completed_chunks: chunkPaths.length,
+    };
+    if (minuteId) {
+      finalUpdate.minute_id = minuteId;
+    }
     await supabase
       .from("transcription_jobs")
-      .update({
-        status: "completed",
-        transcript: refinedTranscript,
-        completed_chunks: chunkPaths.length,
-      })
+      .update(finalUpdate)
       .eq("id", jobId);
 
     // ---- R2 音声ファイルを自動削除 ----
@@ -158,6 +195,7 @@ export async function POST(req: NextRequest) {
       status: "completed",
       completedChunks: chunkPaths.length,
       totalChunks: chunkPaths.length,
+      ...(minuteId ? { minuteId } : {}),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "予期しないエラーが発生しました";

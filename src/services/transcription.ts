@@ -38,6 +38,7 @@ export async function startTranscription(params: {
   fileSize: number;
   fileName: string;
   templateContent?: string;
+  generationMode?: "auto" | "manual";
 }): Promise<string> {
   const {
     data: { session },
@@ -59,6 +60,7 @@ export async function startTranscription(params: {
       fileSize: params.fileSize,
       fileName: params.fileName,
       templateContent: params.templateContent,
+      generationMode: params.generationMode,
     }),
   });
 
