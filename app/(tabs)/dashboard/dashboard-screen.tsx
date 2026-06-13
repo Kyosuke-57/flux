@@ -16,6 +16,7 @@ import { getDashboardData } from "../../../src/services/dashboard";
 import { StatsCard } from "./components/StatsCard";
 import { RecentActivity } from "./components/RecentActivity";
 import { QuickActions } from "./components/QuickActions";
+import { EmptyState } from "./components/EmptyState";
 
 function secondsToHms(s: number) {
   if (s === Infinity) return "∞";
@@ -152,6 +153,34 @@ export default function DashboardScreen() {
 
   const usage = data?.usage;
   const stats = data?.stats;
+
+  // -------- Empty state (logged in, loaded, no data) ----------
+  const isEmpty = data != null
+    && (stats?.totalMinutes ?? 0) === 0
+    && (stats?.totalRecordings ?? 0) === 0
+    && (stats?.totalFolders ?? 0) === 0
+    && (stats?.totalTags ?? 0) === 0;
+
+  if (isEmpty) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: c.background }]} edges={["top", "left", "right"]}>
+        <ScrollView
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={c.primary} colors={[c.primary]} />
+          }
+          contentContainerStyle={styles.scrollContent}
+        >
+          {/* Header */}
+          <FadeInView delay={0} style={styles.header}>
+            <Text style={[styles.title, { color: c.textPrimary }]}>ダッシュボード</Text>
+            <Text style={[styles.subtitle, { color: c.textSecondary }]}>アクティビティの概要</Text>
+          </FadeInView>
+
+          <EmptyState />
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
 
   // -------- Main screen ----------
   return (
