@@ -185,12 +185,26 @@ export async function checkUsageLimit(): Promise<{ allowed: boolean; error: Erro
  * Intended to be called periodically (e.g. via a cron job).
  */
 export async function resetMonthlyUsage() {
-  const { data, error } = await supabase
-    .from("users")
-    .update({ monthly_usage_seconds: 0 })
-    .neq("id", ""); // update all rows
+  try {
+    const { data, error } = await supabase
+      .from("users")
+      .update({ monthly_usage_seconds: 0 })
+      .neq("id", ""); // update all rows
 
-  return { data, error };
+    if (error) {
+      console.error("resetMonthlyUsage: 月間使用量のリセットに失敗しました", error.message);
+      return { data: null, error };
+    }
+
+    return { data, error: null };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "不明なエラー";
+    console.error("resetMonthlyUsage: 予期しないエラーが発生しました", error);
+    return {
+      data: null,
+      error: new Error(`月間使用量のリセットに失敗しました: ${message}`),
+    };
+  }
 }
 
 /**
