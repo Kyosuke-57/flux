@@ -12,7 +12,7 @@ export interface Settings {
 
 interface SettingsContextType {
   settings: Settings;
-  updateSetting: (key: string, value: any) => void;
+  updateSetting: <K extends keyof Settings>(key: K, value: Settings[K]) => void;
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -30,7 +30,7 @@ const SettingsContext = createContext<SettingsContextType>({
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
 
-  const updateSetting = useCallback((key: string, value: any) => {
+  const updateSetting = useCallback(<K extends keyof Settings>(key: K, value: Settings[K]) => {
     setSettings((prev) => ({ ...prev, [key]: value }));
   }, []);
 

@@ -230,8 +230,8 @@ export default function MinuteDetailScreen() {
           ? prev
           : "# 文字起こし\n\n*文字起こしを開始しました。完了までお待ちください。*\n\n---\n\n"
       );
-    } catch (e: any) {
-      Alert.alert("文字起こしエラー", e?.message ?? "音声の文字起こしに失敗しました。");
+    } catch (e: unknown) {
+      Alert.alert("文字起こしエラー", e instanceof Error ? e.message : "音声の文字起こしに失敗しました。");
       setTranscribing(false);
     }
   }, [recordingUri, recordingPath, recordingPathState]);
@@ -269,7 +269,7 @@ export default function MinuteDetailScreen() {
       .map((t) => t.trim())
       .filter(Boolean);
 
-    let error: any = null;
+    let error: Error | null = null;
     if (isNew) {
       const result = await createMinute(
         finalTitle,
@@ -371,8 +371,8 @@ export default function MinuteDetailScreen() {
           updated_at: "",
         };
         await exportAndShareMinute(minute, format as ExportFormat);
-      } catch (e: any) {
-        Alert.alert("エクスポートエラー", e?.message ?? "エクスポートに失敗しました。");
+      } catch (e: unknown) {
+        Alert.alert("エクスポートエラー", e instanceof Error ? e.message : "エクスポートに失敗しました。");
       }
     },
     [title, content, id]

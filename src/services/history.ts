@@ -6,6 +6,7 @@
  * 統合し、時系列でソートしたアクティビティ一覧を提供する。
  */
 import { supabase, requireUser } from "../lib/supabase";
+import type { PostgrestError } from "@supabase/supabase-js";
 import type { Minute, Recording, TranscriptionJob, ExportItem } from "../types";
 
 // ─── 型定義 ───────────────────────────────────────────────
@@ -83,10 +84,10 @@ export async function getAllActivities(): Promise<{
   error: null;
 } | {
   data: null;
-  error: any;
+  error: PostgrestError | Error | null;
 }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError };
+  if (authError || !user) return { data: null, error: authError as unknown as PostgrestError | Error | null };
 
   try {
     const [minutesRes, recordingsRes, jobsRes, exportsRes] = await Promise.allSettled([

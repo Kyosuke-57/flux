@@ -1,4 +1,5 @@
 import { supabase, requireUser } from "../lib/supabase";
+import type { PostgrestError } from "@supabase/supabase-js";
 import type { Favorite } from "../types";
 
 /**
@@ -6,10 +7,10 @@ import type { Favorite } from "../types";
  */
 export async function getAllFavorites(): Promise<{
   data: Favorite[] | null;
-  error: any;
+  error: PostgrestError | null;
 }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError };
+  if (authError || !user) return { data: null, error: authError as unknown as PostgrestError | null };
 
   const { data, error } = await supabase
     .from("favorites")
@@ -26,10 +27,10 @@ export async function getAllFavorites(): Promise<{
  */
 export async function getFavoriteIds(): Promise<{
   data: Set<string> | null;
-  error: any;
+  error: PostgrestError | null;
 }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError };
+  if (authError || !user) return { data: null, error: authError as unknown as PostgrestError | null };
 
   const { data, error } = await supabase
     .from("favorites")
@@ -47,9 +48,9 @@ export async function getFavoriteIds(): Promise<{
  */
 export async function toggleFavorite(
   minuteId: string
-): Promise<{ data: boolean; error: any }> {
+): Promise<{ data: boolean; error: PostgrestError | null }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: false, error: authError };
+  if (authError || !user) return { data: false, error: authError as unknown as PostgrestError | null };
 
   // Check if already favorited
   const { data: existing } = await supabase
@@ -80,9 +81,9 @@ export async function toggleFavorite(
  */
 export async function isFavorited(
   minuteId: string
-): Promise<{ data: boolean; error: any }> {
+): Promise<{ data: boolean; error: PostgrestError | null }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: false, error: authError };
+  if (authError || !user) return { data: false, error: authError as unknown as PostgrestError | null };
 
   const { data, error } = await supabase
     .from("favorites")

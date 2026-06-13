@@ -181,8 +181,8 @@ export default function RecordScreen() {
           },
         ],
       );
-    } catch (err: any) {
-      Alert.alert("エラー", err?.message ?? "音声ファイルのインポートに失敗しました");
+    } catch (err: unknown) {
+      Alert.alert("エラー", err instanceof Error ? err.message : "音声ファイルのインポートに失敗しました");
     }
   };
 

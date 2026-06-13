@@ -149,9 +149,9 @@ export const pipelineManager = {
           this._cleanup();
         },
       );
-    } catch (err: any) {
+    } catch (err: unknown) {
       this._errorMessage =
-        err?.message ?? "パイプライン処理中にエラーが発生しました";
+        err instanceof Error ? err.message : "パイプライン処理中にエラーが発生しました";
       this._setStatus("failed");
       throw err;
     }
@@ -206,7 +206,7 @@ export function subscribeToPipeline(
         table: "transcription_jobs",
         filter: `minute_id=eq.${minuteId}`,
       },
-      (payload: RealtimePostgresChangesPayload<any>) => {
+      (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
         const record = payload.new;
 
         const progress: TranscriptionProgress = {

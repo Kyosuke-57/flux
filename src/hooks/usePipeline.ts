@@ -147,8 +147,8 @@ export function usePipeline() {
         );
 
         unsubscribeRef.current = unsubscribe;
-      } catch (err: any) {
-        setErrorMessage(err?.message ?? "パイプライン処理中にエラーが発生しました");
+      } catch (err: unknown) {
+        setErrorMessage(err instanceof Error ? err.message : "パイプライン処理中にエラーが発生しました");
         setStatus("failed");
         stopTimer();
       }

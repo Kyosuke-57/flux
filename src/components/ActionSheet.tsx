@@ -9,6 +9,7 @@ import {
   Modal,
   Pressable,
 } from "react-native";
+import type { ComponentProps } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useSettings } from "../contexts/SettingsContext";
@@ -148,7 +149,7 @@ export function ActionSheet({
               >
                 {option.icon && (
                   <Ionicons
-                    name={option.icon as any}
+                    name={option.icon as ComponentProps<typeof Ionicons>["name"]}
                     size={20}
                     color={option.destructive ? c.error : c.primary}
                     style={styles.optionIcon}

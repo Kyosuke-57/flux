@@ -63,9 +63,9 @@ export function useRecordingState() {
       await startRecording();
       setElapsed(0);
       setRecState("recording");
-    } catch (err: any) {
+    } catch (err: unknown) {
       haptics.errorNotification();
-      Alert.alert("録音できません", err?.message ?? "録音の開始に失敗しました。");
+      Alert.alert("録音できません", err instanceof Error ? err.message : "録音の開始に失敗しました。");
     }
   };
 
@@ -74,8 +74,8 @@ export function useRecordingState() {
     try {
       await pauseRecording();
       setRecState("paused");
-    } catch (err: any) {
-      Alert.alert("エラー", err?.message ?? "録音の一時停止に失敗しました");
+    } catch (err: unknown) {
+      Alert.alert("エラー", err instanceof Error ? err.message : "録音の一時停止に失敗しました");
     }
   };
 
@@ -84,8 +84,8 @@ export function useRecordingState() {
     try {
       await resumeRecording();
       setRecState("recording");
-    } catch (err: any) {
-      Alert.alert("エラー", err?.message ?? "録音の再開に失敗しました");
+    } catch (err: unknown) {
+      Alert.alert("エラー", err instanceof Error ? err.message : "録音の再開に失敗しました");
     }
   };
 
@@ -101,9 +101,9 @@ export function useRecordingState() {
         `rec_${Date.now()}`,
       );
       setLocalRecordingPath(localPath);
-    } catch (err: any) {
+    } catch (err: unknown) {
       haptics.errorNotification();
-      Alert.alert("エラー", err?.message ?? "録音の停止に失敗しました");
+      Alert.alert("エラー", err instanceof Error ? err.message : "録音の停止に失敗しました");
     }
   };
 

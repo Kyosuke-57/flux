@@ -1,4 +1,5 @@
 import { supabase, requireUser } from "../lib/supabase";
+import type { PostgrestError } from "@supabase/supabase-js";
 import type { TranscriptionJob } from "../types";
 
 /**
@@ -124,9 +125,9 @@ export async function updateTranscriptionJob(
  */
 export async function searchTranscriptionJobs(
   query: string,
-): Promise<{ data: TranscriptionJob[] | null; error: any }> {
+): Promise<{ data: TranscriptionJob[] | null; error: PostgrestError | null }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError };
+  if (authError || !user) return { data: null, error: authError as unknown as PostgrestError | null };
 
   const { data, error } = await supabase
     .from("transcription_jobs")

@@ -34,8 +34,8 @@ export function useRecording() {
       setPipelineState("recording");
       setError(null);
       setElapsed(0);
-    } catch (err: any) {
-      setError(err?.message ?? "録音の開始に失敗しました");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "録音の開始に失敗しました");
     }
   }, []);
 
@@ -44,8 +44,8 @@ export function useRecording() {
       await pauseRec();
       setRecState("paused");
       setPipelineState("paused");
-    } catch (err: any) {
-      setError(err?.message ?? "一時停止に失敗しました");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "一時停止に失敗しました");
     }
   }, []);
 
@@ -54,8 +54,8 @@ export function useRecording() {
       await resumeRec();
       setRecState("recording");
       setPipelineState("recording");
-    } catch (err: any) {
-      setError(err?.message ?? "再開に失敗しました");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "再開に失敗しました");
     }
   }, []);
 
@@ -77,8 +77,8 @@ export function useRecording() {
       fileName = `recording_${Date.now()}.m4a`;
       mimeType = "audio/mp4";
       fileSize = await getFileSize(uri);
-    } catch (err: any) {
-      setError(err?.message ?? "録音の停止に失敗しました");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "録音の停止に失敗しました");
       setPipelineState("idle");
       return;
     }
@@ -125,8 +125,8 @@ export function useRecording() {
 
       // cleanup 用に返す
       return { jobId, unsubscribe };
-    } catch (err: any) {
-      setError(err?.message ?? "アップロードまたは文字起こしに失敗しました");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "アップロードまたは文字起こしに失敗しました");
       setPipelineState("error");
     }
   }, []);

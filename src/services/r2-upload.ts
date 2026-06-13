@@ -92,7 +92,7 @@ export async function uploadToR2(
 
     xhr.open("PUT", uploadUrl);
     xhr.setRequestHeader("Content-Type", params.mimeType);
-    xhr.send({ uri: params.uri, type: params.mimeType, name: params.filename } as any);
+    xhr.send({ uri: params.uri, type: params.mimeType, name: params.filename });
   });
 
   return result;

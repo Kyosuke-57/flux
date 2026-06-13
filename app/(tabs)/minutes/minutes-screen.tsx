@@ -102,8 +102,8 @@ export default function MinutesScreen() {
       if (!minute) return;
       try {
         await exportAndShareMinute(minute, format);
-      } catch (e: any) {
-        Alert.alert("エクスポートエラー", e?.message ?? "エクスポートに失敗しました。");
+      } catch (e: unknown) {
+        Alert.alert("エクスポートエラー", e instanceof Error ? e.message : "エクスポートに失敗しました。");
       }
     },
     [exportMinute],

@@ -1,4 +1,5 @@
 import { supabase, requireUser } from "../lib/supabase";
+import type { PostgrestError } from "@supabase/supabase-js";
 import type { ExportItem } from "../types";
 
 /**
@@ -6,10 +7,10 @@ import type { ExportItem } from "../types";
  */
 export async function getAllExports(): Promise<{
   data: ExportItem[] | null;
-  error: any;
+  error: PostgrestError | null;
 }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError };
+  if (authError || !user) return { data: null, error: authError as unknown as PostgrestError | null };
 
   const { data, error } = await supabase
     .from("exports")
@@ -25,9 +26,9 @@ export async function getAllExports(): Promise<{
  */
 export async function getExport(
   id: string,
-): Promise<{ data: ExportItem | null; error: any }> {
+): Promise<{ data: ExportItem | null; error: PostgrestError | null }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError };
+  if (authError || !user) return { data: null, error: authError as unknown as PostgrestError | null };
 
   const { data, error } = await supabase
     .from("exports")
@@ -50,9 +51,9 @@ export async function createExport(
   title: string,
   format: "txt" | "md" | "pdf",
   minute_id?: string,
-): Promise<{ data: ExportItem | null; error: any }> {
+): Promise<{ data: ExportItem | null; error: PostgrestError | null }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError };
+  if (authError || !user) return { data: null, error: authError as unknown as PostgrestError | null };
 
   const { data, error } = await supabase
     .from("exports")
@@ -74,9 +75,9 @@ export async function createExport(
 export async function updateExport(
   id: string,
   updates: Partial<Pick<ExportItem, "title" | "format" | "minute_id">>,
-): Promise<{ data: ExportItem | null; error: any }> {
+): Promise<{ data: ExportItem | null; error: PostgrestError | null }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError };
+  if (authError || !user) return { data: null, error: authError as unknown as PostgrestError | null };
 
   const { data, error } = await supabase
     .from("exports")
@@ -94,9 +95,9 @@ export async function updateExport(
  */
 export async function deleteExport(
   id: string,
-): Promise<{ data: ExportItem | null; error: any }> {
+): Promise<{ data: ExportItem | null; error: PostgrestError | null }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError };
+  if (authError || !user) return { data: null, error: authError as unknown as PostgrestError | null };
 
   const { data, error } = await supabase
     .from("exports")

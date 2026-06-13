@@ -93,7 +93,7 @@ export function subscribeToTranscription(
         table: "transcription_jobs",
         filter: `id=eq.${jobId}`,
       },
-      (payload: RealtimePostgresChangesPayload<any>) => {
+      (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
         const record = payload.new;
         const progress: TranscriptionProgress = {
           status: record.status,

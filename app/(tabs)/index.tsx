@@ -75,8 +75,8 @@ export default function HomeScreen() {
       if (subRes.data) {
         setUsage(subRes.data);
       }
-    } catch (e: any) {
-      setError(e.message ?? "予期しないエラーが発生しました");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "予期しないエラーが発生しました");
     } finally {
       setLoading(false);
       setRefreshing(false);

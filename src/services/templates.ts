@@ -1,4 +1,5 @@
 import { supabase, requireUser } from "../lib/supabase";
+import type { PostgrestError } from "@supabase/supabase-js";
 import type { Template } from "../types";
 
 /**
@@ -6,10 +7,10 @@ import type { Template } from "../types";
  */
 export async function getAllTemplates(): Promise<{
   data: Template[] | null;
-  error: any;
+  error: PostgrestError | null;
 }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError };
+  if (authError || !user) return { data: null, error: authError as unknown as PostgrestError | null };
 
   const { data, error } = await supabase
     .from("templates")
@@ -25,10 +26,10 @@ export async function getAllTemplates(): Promise<{
  */
 export async function getDefaultTemplate(): Promise<{
   data: Template | null;
-  error: any;
+  error: PostgrestError | null;
 }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError };
+  if (authError || !user) return { data: null, error: authError as unknown as PostgrestError | null };
 
   const { data, error } = await supabase
     .from("templates")
@@ -51,9 +52,9 @@ export async function createTemplate(
   name: string,
   content: string,
   is_default?: boolean
-): Promise<{ data: Template | null; error: any }> {
+): Promise<{ data: Template | null; error: PostgrestError | null }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError };
+  if (authError || !user) return { data: null, error: authError as unknown as PostgrestError | null };
 
   const { data, error } = await supabase
     .from("templates")
@@ -78,9 +79,9 @@ export async function createTemplate(
 export async function updateTemplate(
   id: string,
   updates: Partial<Pick<Template, "name" | "content" | "is_default">>
-): Promise<{ data: Template | null; error: any }> {
+): Promise<{ data: Template | null; error: PostgrestError | null }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError };
+  if (authError || !user) return { data: null, error: authError as unknown as PostgrestError | null };
 
   const { data, error } = await supabase
     .from("templates")
@@ -98,9 +99,9 @@ export async function updateTemplate(
  */
 export async function deleteTemplate(
   id: string
-): Promise<{ data: Template | null; error: any }> {
+): Promise<{ data: Template | null; error: PostgrestError | null }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError };
+  if (authError || !user) return { data: null, error: authError as unknown as PostgrestError | null };
 
   const { data, error } = await supabase
     .from("templates")

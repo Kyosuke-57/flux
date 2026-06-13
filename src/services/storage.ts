@@ -1,5 +1,6 @@
 import * as FileSystem from "expo-file-system/legacy";
 import { supabase } from "../lib/supabase";
+import type { StorageApiError } from "@supabase/supabase-js";
 
 const BUCKET = "recordings";
 
@@ -39,7 +40,7 @@ export async function uploadAudio(
   userId: string,
   recordingId: string,
   uri: string,
-): Promise<{ path: string | null; error: any }> {
+): Promise<{ path: string | null; error: StorageApiError | Error | null }> {
   try {
     const ext = getExtension(uri);
     const filePath = `recordings/${userId}/${recordingId}.${ext}`;
@@ -88,7 +89,7 @@ export function getAudioUrl(path: string): string {
  */
 export async function deleteAudio(
   path: string,
-): Promise<{ error: any }> {
+): Promise<{ error: StorageApiError | null }> {
   const { error } = await supabase.storage.from(BUCKET).remove([path]);
   return { error };
 }

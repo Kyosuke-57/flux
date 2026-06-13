@@ -1,12 +1,13 @@
 import { supabase, requireUser } from "../lib/supabase";
+import type { PostgrestError } from "@supabase/supabase-js";
 import type { Recording } from "../types";
 
 /**
  * 現在のユーザーの録音データ一覧を取得（作成日降順）
  */
-export async function getAllRecordings(): Promise<{ data: Recording[] | null; error: any }> {
+export async function getAllRecordings(): Promise<{ data: Recording[] | null; error: PostgrestError | null }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError };
+  if (authError || !user) return { data: null, error: authError as unknown as PostgrestError | null };
 
   const { data, error } = await supabase
     .from("recordings")
@@ -22,9 +23,9 @@ export async function getAllRecordings(): Promise<{ data: Recording[] | null; er
  */
 export async function getRecording(
   id: string,
-): Promise<{ data: Recording | null; error: any }> {
+): Promise<{ data: Recording | null; error: PostgrestError | null }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError };
+  if (authError || !user) return { data: null, error: authError as unknown as PostgrestError | null };
 
   const { data, error } = await supabase
     .from("recordings")
@@ -41,9 +42,9 @@ export async function getRecording(
  */
 export async function createRecording(
   input: Pick<Recording, "title" | "file_path" | "duration_seconds" | "transcribed">,
-): Promise<{ data: Recording | null; error: any }> {
+): Promise<{ data: Recording | null; error: PostgrestError | null }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError };
+  if (authError || !user) return { data: null, error: authError as unknown as PostgrestError | null };
 
   const { data, error } = await supabase
     .from("recordings")
@@ -66,9 +67,9 @@ export async function createRecording(
 export async function updateRecording(
   id: string,
   updates: Partial<Pick<Recording, "title" | "file_path" | "duration_seconds" | "transcribed">>,
-): Promise<{ data: Recording | null; error: any }> {
+): Promise<{ data: Recording | null; error: PostgrestError | null }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError };
+  if (authError || !user) return { data: null, error: authError as unknown as PostgrestError | null };
 
   const { data, error } = await supabase
     .from("recordings")
@@ -86,9 +87,9 @@ export async function updateRecording(
  */
 export async function deleteRecording(
   id: string,
-): Promise<{ error: any }> {
+): Promise<{ error: PostgrestError | null }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { error: authError };
+  if (authError || !user) return { error: authError as unknown as PostgrestError | null };
 
   const { error } = await supabase
     .from("recordings")
@@ -104,9 +105,9 @@ export async function deleteRecording(
  */
 export async function searchRecordings(
   query: string,
-): Promise<{ data: Recording[] | null; error: any }> {
+): Promise<{ data: Recording[] | null; error: PostgrestError | null }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError };
+  if (authError || !user) return { data: null, error: authError as unknown as PostgrestError | null };
 
   const { data, error } = await supabase
     .from("recordings")

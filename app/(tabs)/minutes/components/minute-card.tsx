@@ -1,5 +1,5 @@
 import React, { useCallback } from "react";
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, GestureResponderEvent } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { SwipeableRow } from "../../../../src/animations/gestures";
 import { HighlightedText } from "../../../../src/components/HighlightedText";
@@ -41,16 +41,16 @@ export function MinuteCard({
   const favorited = isFavorited(item.id);
 
   const handleToggleFavorite = useCallback(
-    (e: any) => {
-      e.stopPropagation?.();
+    (e: GestureResponderEvent) => {
+      e.stopPropagation();
       toggle(item.id);
     },
     [item.id, toggle]
   );
 
   const handleExport = useCallback(
-    (e: any) => {
-      e.stopPropagation?.();
+    (e: GestureResponderEvent) => {
+      e.stopPropagation();
       onExport();
     },
     [onExport]

@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabase";
+import type { Session } from "@supabase/supabase-js";
 import * as WebBrowser from "expo-web-browser";
 import * as Linking from "expo-linking";
 
@@ -94,7 +95,7 @@ export async function getSession() {
 }
 
 export function onAuthStateChange(
-  callback: (event: string, session: any) => void,
+  callback: (event: string, session: Session | null) => void,
 ) {
   return supabase.auth.onAuthStateChange((event, session) =>
     callback(event, session),

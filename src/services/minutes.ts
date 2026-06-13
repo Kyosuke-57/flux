@@ -1,10 +1,11 @@
 import { supabase, requireUser } from "../lib/supabase";
+import type { PostgrestError } from "@supabase/supabase-js";
 import type { Minute } from "../types";
 
 /**
  * Fetch all minutes for the current user, ordered by updated_at descending.
  */
-export async function getAllMinutes(): Promise<{ data: Minute[] | null; error: any }> {
+export async function getAllMinutes(): Promise<{ data: Minute[] | null; error: PostgrestError | null }> {
   const { user, error: authError } = await requireUser();
   if (authError || !user) return { data: null, error: authError };
 
@@ -22,7 +23,7 @@ export async function getAllMinutes(): Promise<{ data: Minute[] | null; error: a
  */
 export async function getMinute(
   id: string
-): Promise<{ data: Minute | null; error: any }> {
+): Promise<{ data: Minute | null; error: PostgrestError | null }> {
   const { user, error: authError } = await requireUser();
   if (authError || !user) return { data: null, error: authError };
 
@@ -53,9 +54,9 @@ export async function createMinute(
   original_transcript?: string,
   corrected_transcript?: string,
   recording_path?: string,
-): Promise<{ data: Minute | null; error: any }> {
+): Promise<{ data: Minute | null; error: PostgrestError | null }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError };
+  if (authError || !user) return { data: null, error: authError as unknown as PostgrestError | null };
 
   const { data, error } = await supabase
     .from("minutes")
@@ -81,7 +82,7 @@ export async function createMinute(
  */
 export async function duplicateMinute(
   id: string,
-): Promise<{ data: Minute | null; error: any }> {
+): Promise<{ data: Minute | null; error: PostgrestError | null }> {
   const { data: original, error: fetchError } = await getMinute(id);
   if (fetchError || !original) {
     return { data: null, error: fetchError ?? new Error("Minute not found") };
@@ -107,9 +108,9 @@ export async function duplicateMinute(
 export async function updateMinute(
   id: string,
   updates: Partial<Pick<Minute, "title" | "content" | "tags" | "template_id" | "folder_id" | "original_transcript" | "corrected_transcript" | "recording_path">>
-): Promise<{ data: Minute | null; error: any }> {
+): Promise<{ data: Minute | null; error: PostgrestError | null }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError };
+  if (authError || !user) return { data: null, error: authError as unknown as PostgrestError | null };
 
   const { data, error } = await supabase
     .from("minutes")
@@ -127,7 +128,7 @@ export async function updateMinute(
  */
 export async function deleteMinute(
   id: string
-): Promise<{ data: Minute | null; error: any }> {
+): Promise<{ data: Minute | null; error: PostgrestError | null }> {
   const { user, error: authError } = await requireUser();
   if (authError || !user) return { data: null, error: authError };
 
@@ -148,7 +149,7 @@ export async function deleteMinute(
  */
 export async function searchMinutes(
   query: string
-): Promise<{ data: Minute[] | null; error: any }> {
+): Promise<{ data: Minute[] | null; error: PostgrestError | null }> {
   const { user, error: authError } = await requireUser();
   if (authError || !user) return { data: null, error: authError };
 

@@ -53,8 +53,8 @@ export default function LoginScreen() {
       } else {
         router.replace("/(tabs)");
       }
-    } catch (err: any) {
-      setError(err?.message || "予期しないエラーが発生しました");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "予期しないエラーが発生しました");
     } finally {
       setLoading(false);
     }
@@ -68,8 +68,8 @@ export default function LoginScreen() {
       if (authError) {
         setError(authError.message);
       }
-    } catch (err: any) {
-      setError(err?.message || "予期しないエラーが発生しました");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "予期しないエラーが発生しました");
     } finally {
       setLoading(false);
     }

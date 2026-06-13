@@ -53,8 +53,8 @@ export default function DashboardScreen() {
       const result = await getDashboardData();
       setData(result);
       setError(null);
-    } catch (e: any) {
-      setError(e.message ?? "ダッシュボードの読み込みに失敗しました");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "ダッシュボードの読み込みに失敗しました");
     } finally {
       setLoading(false);
       setRefreshing(false);

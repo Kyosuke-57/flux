@@ -262,8 +262,8 @@ export async function purchasePlan(planId: SubscriptionPlan): Promise<{ success:
     if (!entitlement) return { success: false, error: "購入は完了しましたが、エンタイトルメントが有効になっていません" };
 
     return await updatePlanTier(planId);
-  } catch (error: any) {
-    if (error?.code === "PURCHASE_CANCELLED_ERROR") return { success: false, error: null };
+  } catch (error: unknown) {
+    if (error && typeof error === "object" && "code" in error && (error as { code: unknown }).code === "PURCHASE_CANCELLED_ERROR") return { success: false, error: null };
     console.error("RevenueCat purchase failed:", error);
     return { success: false, error: "購入に失敗しました" };
   }
