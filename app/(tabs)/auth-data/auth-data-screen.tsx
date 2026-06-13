@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { FlatList, RefreshControl, TouchableOpacity, StyleSheet, View, TextInput } from "react-native";
+import { FlatList, RefreshControl, TouchableOpacity, StyleSheet, View, TextInput, Text } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../../../src/contexts/AuthContext";
@@ -10,6 +10,14 @@ import { AuthDataCard } from "./components/auth-data-card";
 import { EmptyState } from "./components/empty-state";
 import { LoadingSkeleton, UnauthenticatedView } from "./components/skeleton-state";
 import { FormModal } from "./components/form-modal";
+import { sortItems } from "./hooks/utils";
+import type { SortField, SortDirection } from "./hooks/utils";
+
+const SORT_OPTIONS: { field: SortField; label: string }[] = [
+  { field: "date", label: "日付" },
+  { field: "name", label: "名前" },
+  { field: "status", label: "ステータス" },
+];
 
 export default function AuthDataScreen() {
   const { settings } = useSettings();
@@ -40,15 +48,32 @@ export default function AuthDataScreen() {
 
   // ── 検索 ──
   const [searchQuery, setSearchQuery] = useState("");
-  const filteredItems = useMemo(() => {
-    if (!searchQuery.trim()) return items;
-    const q = searchQuery.trim().toLowerCase();
-    return items.filter(
-      (item) =>
-        item.label.toLowerCase().includes(q) ||
-        item.provider.toLowerCase().includes(q),
-    );
-  }, [items, searchQuery]);
+
+  // ── ソート ──
+  const [sortField, setSortField] = useState<SortField>("date");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+
+  const handleSortChange = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDirection(field === "date" ? "desc" : "asc");
+    }
+  };
+
+  const processedItems = useMemo(() => {
+    // 1. フィルタリング
+    const filtered = !searchQuery.trim()
+      ? items
+      : items.filter(
+          (item) =>
+            item.label.toLowerCase().includes(searchQuery.trim().toLowerCase()) ||
+            item.provider.toLowerCase().includes(searchQuery.trim().toLowerCase()),
+        );
+    // 2. ソート
+    return sortItems(filtered, sortField, sortDirection);
+  }, [items, searchQuery, sortField, sortDirection]);
 
   // ── Loading ──
   if (loading) {
@@ -71,25 +96,68 @@ export default function AuthDataScreen() {
         <EmptyState onAdd={openCreateForm} color={c} />
       ) : (
         <FlatList
-          data={filteredItems}
+          data={processedItems}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
           ListHeaderComponent={
-            <View style={[styles.searchWrapper, { backgroundColor: c.background }]}>
-              <View style={[styles.searchBar, { backgroundColor: c.surfaceSecondary, borderColor: c.border }]}>
-                <Ionicons name="search" size={16} color={c.textMuted} />
-                <TextInput
-                  style={[styles.searchInput, { color: c.textPrimary }]}
-                  value={searchQuery}
-                  onChangeText={setSearchQuery}
-                  placeholder="名前またはプロバイダで検索..."
-                  placeholderTextColor={c.textMuted}
-                />
-                {searchQuery.length > 0 && (
-                  <TouchableOpacity onPress={() => setSearchQuery("")}>
-                    <Ionicons name="close-circle" size={16} color={c.textMuted} />
-                  </TouchableOpacity>
-                )}
+            <View>
+              {/* 検索バー */}
+              <View style={[styles.searchWrapper, { backgroundColor: c.background }]}>
+                <View style={[styles.searchBar, { backgroundColor: c.surfaceSecondary, borderColor: c.border }]}>
+                  <Ionicons name="search" size={16} color={c.textMuted} />
+                  <TextInput
+                    style={[styles.searchInput, { color: c.textPrimary }]}
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                    placeholder="名前またはプロバイダで検索..."
+                    placeholderTextColor={c.textMuted}
+                  />
+                  {searchQuery.length > 0 && (
+                    <TouchableOpacity onPress={() => setSearchQuery("")}>
+                      <Ionicons name="close-circle" size={16} color={c.textMuted} />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+              {/* ソートコントロール */}
+              <View style={[styles.sortRow, { backgroundColor: c.background }]}>
+                {SORT_OPTIONS.map((opt) => {
+                  const active = sortField === opt.field;
+                  const icon = active
+                    ? sortDirection === "asc"
+                      ? "arrow-up"
+                      : "arrow-down"
+                    : "arrow-up";
+                  return (
+                    <TouchableOpacity
+                      key={opt.field}
+                      style={[
+                        styles.sortChip,
+                        {
+                          backgroundColor: active ? c.primaryBg : "transparent",
+                          borderColor: active ? c.primary : c.border,
+                        },
+                      ]}
+                      onPress={() => handleSortChange(opt.field)}
+                      activeOpacity={0.7}
+                    >
+                      <Text
+                        style={[
+                          styles.sortChipText,
+                          { color: active ? c.primary : c.textMuted },
+                        ]}
+                      >
+                        {opt.label}
+                      </Text>
+                      <Ionicons
+                        name={icon}
+                        size={12}
+                        color={active ? c.primary : "transparent"}
+                        style={styles.sortIcon}
+                      />
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
             </View>
           }
@@ -175,6 +243,28 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 10,
     fontSize: 15,
+  },
+  sortRow: {
+    flexDirection: "row",
+    paddingHorizontal: 24,
+    paddingTop: 8,
+    paddingBottom: 4,
+    gap: 8,
+  },
+  sortChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  sortChipText: {
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  sortIcon: {
+    marginLeft: 4,
   },
   noResults: {
     alignItems: "center",
