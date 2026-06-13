@@ -140,6 +140,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="transcription-jobs"
+        options={{
+          title: "ジョブ管理",
+          tabBarIcon: ({ focused }) => <TabIcon icon="hammer" focused={focused} c={c} />,
+        }}
+      />
+      <Tabs.Screen
         name="storage"
         options={{
           title: "ストレージ",
