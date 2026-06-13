@@ -105,6 +105,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="auth"
+        options={{
+          title: "認証",
+          tabBarIcon: ({ focused }) => <TabIcon icon="key" focused={focused} c={c} />,
+        }}
+      />
+      <Tabs.Screen
         name="settings"
         options={{
           title: "設定",

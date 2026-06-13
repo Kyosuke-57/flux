@@ -59,6 +59,17 @@ export interface Template {
   updated_at: string;
 }
 
+export interface AuthData {
+  id: string;
+  user_id: string;
+  provider: string;
+  label: string;
+  api_key: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export type SubscriptionPlan = "free" | "pro" | "byok";
 
 export const PLAN_LIMITS: Record<SubscriptionPlan, number> = {
