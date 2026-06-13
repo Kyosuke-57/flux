@@ -62,36 +62,45 @@ export const PLANS: PlanInfo[] = [
  * Falls back to free plan if the users table doesn't exist yet.
  */
 export async function getSubscriptionStatus() {
-  const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError };
+  try {
+    const { user, error: authError } = await requireUser();
+    if (authError || !user) return { data: null, error: authError };
 
-  const { data: userData, error: userError } = await supabase
-    .from("users")
-    .select("subscription_tier, monthly_usage_seconds, monthly_limit_seconds")
-    .eq("id", user.id)
-    .single();
+    const { data: userData, error: userError } = await supabase
+      .from("users")
+      .select("subscription_tier, monthly_usage_seconds, monthly_limit_seconds")
+      .eq("id", user.id)
+      .single();
 
-  if (userError) {
-    // users table might not exist yet, return free plan defaults
-    console.warn("subscription: users table not available, defaulting to free", userError.message);
+    if (userError) {
+      // users table might not exist yet, return free plan defaults
+      console.warn("subscription: users table not available, defaulting to free", userError.message);
+      return {
+        data: {
+          plan: "free" as SubscriptionPlan,
+          usageSeconds: 0,
+          limitSeconds: PLAN_LIMITS.free,
+        },
+        error: null,
+      };
+    }
+
     return {
       data: {
-        plan: "free" as SubscriptionPlan,
-        usageSeconds: 0,
-        limitSeconds: PLAN_LIMITS.free,
+        plan: userData.subscription_tier as SubscriptionPlan,
+        usageSeconds: userData.monthly_usage_seconds ?? 0,
+        limitSeconds: userData.monthly_limit_seconds ?? PLAN_LIMITS[userData.subscription_tier as SubscriptionPlan] ?? 600,
       },
       error: null,
     };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "不明なエラー";
+    console.error("getSubscriptionStatus: 予期しないエラーが発生しました", error);
+    return {
+      data: null,
+      error: new Error(`サブスクリプション情報の取得に失敗しました: ${message}`),
+    };
   }
-
-  return {
-    data: {
-      plan: userData.subscription_tier as SubscriptionPlan,
-      usageSeconds: userData.monthly_usage_seconds ?? 0,
-      limitSeconds: userData.monthly_limit_seconds ?? PLAN_LIMITS[userData.subscription_tier as SubscriptionPlan] ?? 600,
-    },
-    error: null,
-  };
 }
 
 /**
