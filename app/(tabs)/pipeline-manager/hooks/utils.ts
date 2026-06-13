@@ -16,6 +16,12 @@ export const STATUS_ORDER: PipelineStatus[] = [
   "failed",
 ];
 
+/** ソートの対象フィールド */
+export type SortField = "date" | "name" | "status";
+
+/** ソートの向き */
+export type SortDirection = "asc" | "desc";
+
 export function getStatusLabel(status: PipelineStatus): string {
   return STATUS_LABELS[status] ?? status;
 }
@@ -45,8 +51,34 @@ export function getProgressLabel(
   return `${completed}/${total}`;
 }
 
-export function sortJobs(list: TranscriptionJob[]): TranscriptionJob[] {
-  return [...list].sort(
-    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-  );
+/**
+ * 設定可能なソート関数。
+ * @param list ソート対象のリスト
+ * @param field ソートフィールド（date / name / status）
+ * @param direction 昇順（asc）／降順（desc）
+ */
+export function sortJobs(
+  list: TranscriptionJob[],
+  field: SortField = "date",
+  direction: SortDirection = "desc",
+): TranscriptionJob[] {
+  return [...list].sort((a, b) => {
+    let cmp: number;
+    switch (field) {
+      case "date":
+        cmp =
+          new Date(a.created_at).getTime() -
+          new Date(b.created_at).getTime();
+        break;
+      case "name":
+        cmp = a.file_name.localeCompare(b.file_name, "ja");
+        break;
+      case "status":
+        cmp =
+          STATUS_ORDER.indexOf(a.status) -
+          STATUS_ORDER.indexOf(b.status);
+        break;
+    }
+    return direction === "asc" ? cmp : -cmp;
+  });
 }
