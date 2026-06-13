@@ -133,6 +133,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="auth-data"
+        options={{
+          title: "認証データ",
+          tabBarIcon: ({ focused }) => <TabIcon icon="shield-checkmark" focused={focused} c={c} />,
+        }}
+      />
+      <Tabs.Screen
         name="storage"
         options={{
           title: "ストレージ",
