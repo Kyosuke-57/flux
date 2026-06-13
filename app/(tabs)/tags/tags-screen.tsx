@@ -8,6 +8,7 @@ import { theme } from "../../../src/theme";
 import { useTagsData } from "./hooks/use-tags-data";
 import { TagCard } from "./components/tag-card";
 import { TagFormModal } from "./components/tag-form-modal";
+import { SortControls } from "./components/sort-controls";
 import { EmptyState } from "./components/empty-state";
 import { LoadingSkeleton } from "./components/skeleton-state";
 
@@ -23,7 +24,11 @@ export default function TagsScreen() {
     refreshing,
     formModalVisible,
     editingTag,
+    sortBy,
+    sortOrder,
     setSearch,
+    handleSortByChange,
+    handleSortOrderToggle,
     onRefresh,
     handleOpenCreate,
     handleOpenEdit,
@@ -72,6 +77,15 @@ export default function TagsScreen() {
           <Ionicons name="add" size={22} color={c.textInverse} />
         </TouchableOpacity>
       </View>
+
+      {/* ソートコントロール */}
+      <SortControls
+        sortBy={sortBy}
+        sortOrder={sortOrder}
+        onSortByChange={handleSortByChange}
+        onSortOrderToggle={handleSortOrderToggle}
+        color={c}
+      />
 
       {/* 一覧 */}
       {filteredTags.length === 0 && !search ? (

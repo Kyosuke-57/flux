@@ -42,11 +42,15 @@ export interface Folder {
   updated_at: string;
 }
 
+export type TagStatus = "active" | "archived";
+
 export interface Tag {
   id: string;
   user_id: string;
   name: string;
   color?: string;
+  status: TagStatus;
+  created_at: string;
 }
 
 export interface Template {

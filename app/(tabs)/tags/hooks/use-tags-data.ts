@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { Alert } from "react-native";
 import { useAuth } from "../../../../src/contexts/AuthContext";
 import { useToast } from "../../../../src/contexts/ToastContext";
 import { getAllTags, createTag, updateTag, deleteTag } from "../../../../src/services/tags";
-import type { Tag } from "../../../../src/types";
+import type { Tag, TagStatus } from "../../../../src/types";
+import type { SortBy, SortOrder } from "../components/sort-controls";
 
 // ─── カスタムフック ─────────────────────────────────────────
 
@@ -18,6 +19,10 @@ export function useTagsData() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  // ── ソート状態 ──
+  const [sortBy, setSortBy] = useState<SortBy>("name");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
 
   // ── モーダル状態 ──
   const [formModalVisible, setFormModalVisible] = useState(false);
@@ -50,9 +55,44 @@ export function useTagsData() {
   }, [fetchData]);
 
   // ── 検索フィルタリング ──
-  const filteredTags = search.trim()
-    ? tags.filter((t) => t.name.toLowerCase().includes(search.toLowerCase()))
-    : tags;
+  const filteredBySearch = useMemo(
+    () =>
+      search.trim()
+        ? tags.filter((t) => t.name.toLowerCase().includes(search.toLowerCase()))
+        : tags,
+    [tags, search],
+  );
+
+  // ── ソート ──
+  const statusOrder: Record<TagStatus, number> = { active: 0, archived: 1 };
+
+  const sortedTags = useMemo(() => {
+    const sorted = [...filteredBySearch];
+    sorted.sort((a, b) => {
+      let cmp = 0;
+      switch (sortBy) {
+        case "date":
+          cmp = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+          break;
+        case "name":
+          cmp = a.name.localeCompare(b.name, "ja");
+          break;
+        case "status":
+          cmp = statusOrder[a.status] - statusOrder[b.status];
+          break;
+      }
+      return sortOrder === "asc" ? cmp : -cmp;
+    });
+    return sorted;
+  }, [filteredBySearch, sortBy, sortOrder]);
+
+  const handleSortByChange = useCallback((by: SortBy) => {
+    setSortBy(by);
+  }, []);
+
+  const handleSortOrderToggle = useCallback(() => {
+    setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
+  }, []);
 
   // ── モーダルを開く（作成） ──
   const handleOpenCreate = useCallback(() => {
@@ -144,15 +184,23 @@ export function useTagsData() {
   return {
     // データ
     tags,
-    filteredTags,
+    filteredTags: sortedTags,
     search,
     loading,
     refreshing,
     formModalVisible,
     editingTag,
 
+    // ソート状態
+    sortBy,
+    sortOrder,
+
     // セッター
     setSearch,
+
+    // ソートアクション
+    handleSortByChange,
+    handleSortOrderToggle,
 
     // アクション
     fetchData,
