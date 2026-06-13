@@ -112,6 +112,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="folders"
+        options={{
+          title: "フォルダ",
+          tabBarIcon: ({ focused }) => <TabIcon icon="folder" focused={focused} c={c} />,
+        }}
+      />
+      <Tabs.Screen
         name="subscription"
         options={{
           title: "サブスク",

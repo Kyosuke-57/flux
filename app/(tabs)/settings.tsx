@@ -419,7 +419,7 @@ export default function SettingsScreen() {
         {/* ─── 整理 ─── */}
         <Text style={[styles.section, { color: c.textMuted }]}>整理</Text>
         <View style={[styles.card, { backgroundColor: c.surface, borderColor: c.cardBorder }]}>
-          <TouchableOpacity style={styles.row} onPress={() => setManageTarget("folder")}>
+          <TouchableOpacity style={styles.row} onPress={() => router.push("/(tabs)/folders")}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
               <Ionicons name="folder" size={16} color={c.textMuted} />
               <Text style={[styles.rowText, { color: c.textPrimary }]}>フォルダ管理</Text>
