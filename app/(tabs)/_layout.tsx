@@ -119,6 +119,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="storage"
+        options={{
+          title: "ストレージ",
+          tabBarIcon: ({ focused }) => <TabIcon icon="server" focused={focused} c={c} />,
+        }}
+      />
+      <Tabs.Screen
         name="settings"
         options={{
           title: "設定",
