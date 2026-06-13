@@ -54,7 +54,15 @@ vi.mock("../../src/lib/supabase", () => ({
 
 // ---- Imports under test ----
 
-import { getAllMinutes, createMinute, updateMinute, deleteMinute } from "../../src/services/minutes";
+import {
+  getAllMinutes,
+  getMinute,
+  createMinute,
+  duplicateMinute,
+  updateMinute,
+  deleteMinute,
+  searchMinutes,
+} from "../../src/services/minutes";
 
 // ---- Test data ----
 
@@ -89,8 +97,8 @@ describe("minutes service", () => {
     mockRequireUser.mockResolvedValue({ user: { id: "user-1" }, error: null });
   });
 
-  describe("fetchMinutes", () => {
-    it("fetchMinutes returns formatted data", async () => {
+  describe("getAllMinutes", () => {
+    it("returns all minutes ordered by updated_at desc", async () => {
       const expected = { data: [mockMinute1, mockMinute2], error: null };
       mockFrom.mockReturnValue(createMockQueryBuilder(expected));
 
@@ -99,10 +107,69 @@ describe("minutes service", () => {
       expect(result).toEqual(expected);
       expect(mockFrom).toHaveBeenCalledWith("minutes");
     });
+
+    it("returns auth error when user is not authenticated", async () => {
+      const authError = new Error("Not authenticated");
+      mockRequireUser.mockResolvedValue({ user: null, error: authError });
+
+      const result = await getAllMinutes();
+
+      expect(result).toEqual({ data: null, error: authError });
+      expect(mockFrom).not.toHaveBeenCalled();
+    });
+
+    it("returns error when Supabase query fails", async () => {
+      const expected = { data: null, error: mockError };
+      mockFrom.mockReturnValue(createMockQueryBuilder(expected));
+
+      const result = await getAllMinutes();
+
+      expect(result).toEqual(expected);
+    });
   });
 
-  describe("createMinutes", () => {
-    it("createMinutes creates a new minute entry", async () => {
+  describe("getMinute", () => {
+    it("returns a single minute by id", async () => {
+      const expected = { data: mockMinute1, error: null };
+      mockFrom.mockReturnValue(createMockQueryBuilder(expected));
+
+      const result = await getMinute("minute-1");
+
+      expect(result).toEqual(expected);
+      expect(mockFrom).toHaveBeenCalledWith("minutes");
+    });
+
+    it("returns auth error when user is not authenticated", async () => {
+      const authError = new Error("Not authenticated");
+      mockRequireUser.mockResolvedValue({ user: null, error: authError });
+
+      const result = await getMinute("minute-1");
+
+      expect(result).toEqual({ data: null, error: authError });
+      expect(mockFrom).not.toHaveBeenCalled();
+    });
+
+    it("returns null data when minute not found", async () => {
+      const expected = { data: null, error: null };
+      mockFrom.mockReturnValue(createMockQueryBuilder(expected));
+
+      const result = await getMinute("nonexistent-id");
+
+      expect(result).toEqual(expected);
+    });
+
+    it("returns error when Supabase query fails", async () => {
+      const expected = { data: null, error: mockError };
+      mockFrom.mockReturnValue(createMockQueryBuilder(expected));
+
+      const result = await getMinute("minute-1");
+
+      expect(result).toEqual(expected);
+    });
+  });
+
+  describe("createMinute", () => {
+    it("creates a new minute entry", async () => {
       const expected = { data: mockMinute1, error: null };
       mockFrom.mockReturnValue(createMockQueryBuilder(expected));
 
@@ -120,23 +187,104 @@ describe("minutes service", () => {
       expect(result).toEqual(expected);
       expect(mockFrom).toHaveBeenCalledWith("minutes");
     });
+
+    it("returns auth error when user is not authenticated", async () => {
+      const authError = new Error("Not authenticated");
+      mockRequireUser.mockResolvedValue({ user: null, error: authError });
+
+      const result = await createMinute("title", "content");
+
+      expect(result).toEqual({ data: null, error: authError });
+      expect(mockFrom).not.toHaveBeenCalled();
+    });
+
+    it("returns error when Supabase insert fails", async () => {
+      const expected = { data: null, error: mockError };
+      mockFrom.mockReturnValue(createMockQueryBuilder(expected));
+
+      const result = await createMinute("title", "content");
+
+      expect(result).toEqual(expected);
+    });
   });
 
-  describe("updateMinutes", () => {
-    it("updateMinutes updates existing entry", async () => {
+  describe("duplicateMinute", () => {
+    it("creates a copy with (コピー) suffix", async () => {
+      const qb = createMockQueryBuilder({ data: mockMinute1, error: null });
+      mockFrom.mockReturnValue(qb);
+
+      const result = await duplicateMinute("minute-1");
+
+      expect(result).toEqual({ data: mockMinute1, error: null });
+      // getMinute と createMinute で2回 from が呼ばれる
+      expect(mockFrom).toHaveBeenCalledTimes(2);
+      expect(mockFrom).toHaveBeenCalledWith("minutes");
+      // insert に (コピー) が付与されていることを確認
+      expect(qb.insert).toHaveBeenCalledWith(
+        expect.objectContaining({ title: "テスト議事録1 (コピー)" }),
+      );
+    });
+
+    it("returns error when original minute is not found", async () => {
+      mockFrom.mockReturnValue(
+        createMockQueryBuilder({ data: null, error: null }),
+      );
+
+      const result = await duplicateMinute("nonexistent-id");
+
+      expect(result).toEqual({
+        data: null,
+        error: new Error("Minute not found"),
+      });
+    });
+
+    it("returns error when fetching original fails", async () => {
+      mockFrom.mockReturnValue(
+        createMockQueryBuilder({ data: null, error: mockError }),
+      );
+
+      const result = await duplicateMinute("minute-1");
+
+      expect(result).toEqual({ data: null, error: mockError });
+    });
+  });
+
+  describe("updateMinute", () => {
+    it("updates existing entry", async () => {
       const updated = { ...mockMinute1, title: "更新済みタイトル" };
       const expected = { data: updated, error: null };
       mockFrom.mockReturnValue(createMockQueryBuilder(expected));
 
-      const result = await updateMinute("minute-1", { title: "更新済みタイトル" });
+      const result = await updateMinute("minute-1", {
+        title: "更新済みタイトル",
+      });
 
       expect(result).toEqual(expected);
       expect(mockFrom).toHaveBeenCalledWith("minutes");
     });
+
+    it("returns auth error when user is not authenticated", async () => {
+      const authError = new Error("Not authenticated");
+      mockRequireUser.mockResolvedValue({ user: null, error: authError });
+
+      const result = await updateMinute("minute-1", { title: "new title" });
+
+      expect(result).toEqual({ data: null, error: authError });
+      expect(mockFrom).not.toHaveBeenCalled();
+    });
+
+    it("returns error when Supabase update fails", async () => {
+      const expected = { data: null, error: mockError };
+      mockFrom.mockReturnValue(createMockQueryBuilder(expected));
+
+      const result = await updateMinute("minute-1", { title: "new title" });
+
+      expect(result).toEqual(expected);
+    });
   });
 
-  describe("deleteMinutes", () => {
-    it("deleteMinutes deletes", async () => {
+  describe("deleteMinute", () => {
+    it("deletes a minute by id", async () => {
       const expected = { data: mockMinute1, error: null };
       mockFrom.mockReturnValue(createMockQueryBuilder(expected));
 
@@ -145,26 +293,64 @@ describe("minutes service", () => {
       expect(result).toEqual(expected);
       expect(mockFrom).toHaveBeenCalledWith("minutes");
     });
-  });
 
-  describe("error handling", () => {
-    it("returns error when Supabase query fails", async () => {
+    it("returns auth error when user is not authenticated", async () => {
+      const authError = new Error("Not authenticated");
+      mockRequireUser.mockResolvedValue({ user: null, error: authError });
+
+      const result = await deleteMinute("minute-1");
+
+      expect(result).toEqual({ data: null, error: authError });
+      expect(mockFrom).not.toHaveBeenCalled();
+    });
+
+    it("returns error when Supabase delete fails", async () => {
       const expected = { data: null, error: mockError };
       mockFrom.mockReturnValue(createMockQueryBuilder(expected));
 
-      const result = await getAllMinutes();
+      const result = await deleteMinute("minute-1");
 
       expect(result).toEqual(expected);
+    });
+  });
+
+  describe("searchMinutes", () => {
+    it("returns filtered results matching query", async () => {
+      const expected = { data: [mockMinute1], error: null };
+      mockFrom.mockReturnValue(createMockQueryBuilder(expected));
+
+      const result = await searchMinutes("テスト");
+
+      expect(result).toEqual(expected);
+      expect(mockFrom).toHaveBeenCalledWith("minutes");
     });
 
     it("returns auth error when user is not authenticated", async () => {
       const authError = new Error("Not authenticated");
       mockRequireUser.mockResolvedValue({ user: null, error: authError });
 
-      const result = await getAllMinutes();
+      const result = await searchMinutes("テスト");
 
       expect(result).toEqual({ data: null, error: authError });
       expect(mockFrom).not.toHaveBeenCalled();
+    });
+
+    it("returns empty array when no minutes match", async () => {
+      const expected = { data: [], error: null };
+      mockFrom.mockReturnValue(createMockQueryBuilder(expected));
+
+      const result = await searchMinutes("存在しないクエリ");
+
+      expect(result).toEqual(expected);
+    });
+
+    it("returns error when Supabase query fails", async () => {
+      const expected = { data: null, error: mockError };
+      mockFrom.mockReturnValue(createMockQueryBuilder(expected));
+
+      const result = await searchMinutes("テスト");
+
+      expect(result).toEqual(expected);
     });
   });
 });
