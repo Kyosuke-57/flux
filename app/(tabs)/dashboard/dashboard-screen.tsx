@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  View, Text, TouchableOpacity, StyleSheet,
+  View, Text, TextInput, TouchableOpacity, StyleSheet,
   ScrollView, RefreshControl, ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -37,6 +37,7 @@ export default function DashboardScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const fetchDashboard = useCallback(async () => {
     if (!user) {
@@ -70,6 +71,19 @@ export default function DashboardScreen() {
       }
     }, [authLoading, user, fetchDashboard]),
   );
+
+  const recentActivity = data?.recentActivity ?? [];
+
+  const filteredActivities = useMemo(() => {
+    if (!searchQuery.trim()) return recentActivity;
+    const q = searchQuery.toLowerCase();
+    return recentActivity.filter((item) => {
+      const nameMatch = item.title.toLowerCase().includes(q);
+      const statusMatch = item.status?.toLowerCase().includes(q) ?? false;
+      const typeMatch = item.type.toLowerCase().includes(q);
+      return nameMatch || statusMatch || typeMatch;
+    });
+  }, [searchQuery, recentActivity]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -115,7 +129,6 @@ export default function DashboardScreen() {
 
   const usage = data?.usage;
   const stats = data?.stats;
-  const recentActivity = data?.recentActivity ?? [];
 
   // -------- Main screen ----------
   return (
@@ -135,6 +148,37 @@ export default function DashboardScreen() {
         <FadeInView delay={0} style={styles.header}>
           <Text style={[styles.title, { color: c.textPrimary }]}>ダッシュボード</Text>
           <Text style={[styles.subtitle, { color: c.textSecondary }]}>アクティビティの概要</Text>
+        </FadeInView>
+
+        {/* Search Bar */}
+        <FadeInView delay={60}>
+          <View style={[styles.searchContainer, { backgroundColor: c.inputBg, borderColor: c.border }]}>
+            <Ionicons name="search" size={18} color={c.textMuted} style={styles.searchIcon} />
+            <TextInput
+              style={[styles.searchInput, { color: c.textPrimary }]}
+              placeholder="名前や内容でフィルタ..."
+              placeholderTextColor={c.textMuted}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              autoCapitalize="none"
+              autoCorrect={false}
+              clearButtonMode="while-editing"
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity
+                onPress={() => setSearchQuery("")}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                style={styles.searchClear}
+              >
+                <Ionicons name="close-circle" size={18} color={c.textMuted} />
+              </TouchableOpacity>
+            )}
+          </View>
+          {searchQuery.length > 0 && filteredActivities.length === 0 && (
+            <Text style={[styles.searchEmptyText, { color: c.textSecondary }]}>
+              一致するアクティビティがありません
+            </Text>
+          )}
         </FadeInView>
 
         {/* Section 1: Usage + Stats Grid */}
@@ -224,7 +268,7 @@ export default function DashboardScreen() {
             <Text style={[styles.sectionTitle, { color: c.textPrimary }]}>最近のアクティビティ</Text>
           </View>
           <RecentActivity
-            activities={recentActivity}
+            activities={filteredActivities}
             color={c}
             onPress={(id, type) => {
               haptics.lightTap();
@@ -270,6 +314,27 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: Spacing.xxl, paddingTop: Spacing.lg, paddingBottom: Spacing.sm },
   title: { fontSize: 32, fontWeight: "700" },
   subtitle: { fontSize: 14, marginTop: Spacing.xs },
+
+  /* Search bar */
+  searchContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginHorizontal: Spacing.xxl,
+    marginTop: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    height: 44,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+  },
+  searchIcon: { marginRight: Spacing.sm },
+  searchInput: { flex: 1, fontSize: 15, paddingVertical: 0 },
+  searchClear: { marginLeft: Spacing.sm },
+  searchEmptyText: {
+    fontSize: 14,
+    textAlign: "center",
+    marginTop: Spacing.md,
+    paddingBottom: Spacing.sm,
+  },
 
   /* Usage bar */
   usageBar: {
