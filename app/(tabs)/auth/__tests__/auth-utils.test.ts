@@ -41,24 +41,55 @@ describe("formatDate", () => {
 });
 
 describe("sortAuthData", () => {
-  it("新しい順にソートする", () => {
-    const items = [
-      { created_at: "2026-01-01T00:00:00Z" },
-      { created_at: "2026-06-01T00:00:00Z" },
-      { created_at: "2025-06-01T00:00:00Z" },
-    ] as AuthData[];
+  const items = [
+    { id: "a", label: "Beta", provider: "openai", api_key: "sk-1", is_active: true, created_at: "2026-06-01T00:00:00Z", updated_at: "" },
+    { id: "b", label: "Alpha", provider: "anthropic", api_key: "sk-2", is_active: false, created_at: "2026-01-01T00:00:00Z", updated_at: "" },
+    { id: "c", label: "Gamma", provider: "google", api_key: "sk-3", is_active: true, created_at: "2025-06-01T00:00:00Z", updated_at: "" },
+  ] as AuthData[];
 
+  it("デフォルトは日付降順（新しい順）", () => {
     const sorted = sortAuthData(items);
-    expect(sorted[0].created_at).toBe("2026-06-01T00:00:00Z");
-    expect(sorted[1].created_at).toBe("2026-01-01T00:00:00Z");
-    expect(sorted[2].created_at).toBe("2025-06-01T00:00:00Z");
+    expect(sorted[0].id).toBe("a");
+    expect(sorted[1].id).toBe("b");
+    expect(sorted[2].id).toBe("c");
+  });
+
+  it("日付昇順（古い順）", () => {
+    const sorted = sortAuthData(items, "date", "asc");
+    expect(sorted[0].id).toBe("c");
+    expect(sorted[1].id).toBe("b");
+    expect(sorted[2].id).toBe("a");
+  });
+
+  it("名前降順", () => {
+    const sorted = sortAuthData(items, "name", "desc");
+    expect(sorted[0].label).toBe("Gamma");
+    expect(sorted[1].label).toBe("Beta");
+    expect(sorted[2].label).toBe("Alpha");
+  });
+
+  it("名前昇順（あいうえお順）", () => {
+    const sorted = sortAuthData(items, "name", "asc");
+    expect(sorted[0].label).toBe("Alpha");
+    expect(sorted[1].label).toBe("Beta");
+    expect(sorted[2].label).toBe("Gamma");
+  });
+
+  it("ステータス降順（アクティブ→非アクティブ）", () => {
+    const sorted = sortAuthData(items, "status", "desc");
+    expect(sorted[0].is_active).toBe(true);
+    expect(sorted[1].is_active).toBe(true);
+    expect(sorted[2].is_active).toBe(false);
+  });
+
+  it("ステータス昇順（非アクティブ→アクティブ）", () => {
+    const sorted = sortAuthData(items, "status", "asc");
+    expect(sorted[0].is_active).toBe(false);
+    expect(sorted[1].is_active).toBe(true);
+    expect(sorted[2].is_active).toBe(true);
   });
 
   it("元の配列を変更しない", () => {
-    const items = [
-      { created_at: "2026-06-01T00:00:00Z" },
-      { created_at: "2025-01-01T00:00:00Z" },
-    ] as AuthData[];
     const copy = [...items];
     sortAuthData(items);
     expect(items).toEqual(copy);

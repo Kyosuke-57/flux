@@ -1,5 +1,8 @@
 import type { AuthData } from "../../../../src/types";
 
+export type SortField = "date" | "name" | "status";
+export type SortDirection = "asc" | "desc";
+
 export function formatDate(iso: string): string {
   const d = new Date(iso);
   return d.toLocaleDateString("ja-JP", {
@@ -29,10 +32,26 @@ export function getProviderLabel(provider: string): string {
   return found ? found.label : provider;
 }
 
-export function sortAuthData(list: AuthDTO[]): AuthDTO[] {
-  return [...list].sort(
-    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-  );
+export function sortAuthData(
+  list: AuthDTO[],
+  field: SortField = "date",
+  direction: SortDirection = "desc",
+): AuthDTO[] {
+  return [...list].sort((a, b) => {
+    let cmp: number;
+    switch (field) {
+      case "date":
+        cmp = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        break;
+      case "name":
+        cmp = a.label.localeCompare(b.label, "ja");
+        break;
+      case "status":
+        cmp = Number(a.is_active) - Number(b.is_active);
+        break;
+    }
+    return direction === "desc" ? -cmp : cmp;
+  });
 }
 
 export function filterAuthData(list: AuthDTO[], query: string): AuthDTO[] {

@@ -10,7 +10,9 @@ import { AuthCard } from "./components/auth-card";
 import { EmptyState } from "./components/empty-state";
 import { LoadingSkeleton, UnauthenticatedView } from "./components/skeleton-state";
 import { FormModal } from "./components/form-modal";
-import { filterAuthData } from "./hooks/utils";
+import { SortControl } from "./components/sort-control";
+import { filterAuthData, sortAuthData } from "./hooks/utils";
+import type { SortField, SortDirection } from "./hooks/utils";
 
 export default function AuthScreen() {
   const { settings } = useSettings();
@@ -40,10 +42,17 @@ export default function AuthScreen() {
   } = useAuthData();
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [sortField, setSortField] = useState<SortField>("date");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
 
   const filteredItems = useMemo(
     () => filterAuthData(items, searchQuery),
     [items, searchQuery],
+  );
+
+  const sortedItems = useMemo(
+    () => sortAuthData(filteredItems, sortField, sortDirection),
+    [filteredItems, sortField, sortDirection],
   );
 
   // ── Loading ──
@@ -86,6 +95,19 @@ export default function AuthScreen() {
         </View>
       )}
 
+      {/* ソートコントロール */}
+      {items.length > 0 && (
+        <SortControl
+          sortField={sortField}
+          sortDirection={sortDirection}
+          onChange={(field, dir) => {
+            setSortField(field);
+            setSortDirection(dir);
+          }}
+          color={c}
+        />
+      )}
+
       {/* 空状態 */}
       {items.length === 0 ? (
         <EmptyState onAdd={openCreateForm} color={c} />
@@ -98,7 +120,7 @@ export default function AuthScreen() {
         </View>
       ) : (
         <FlatList
-          data={filteredItems}
+          data={sortedItems}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
           refreshControl={
