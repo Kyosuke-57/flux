@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const mockGetUser = vi.hoisted(() => vi.fn());
 
 // Supabaseクエリチェーンの結果をテストごとに差し替えられるようにする共有オブジェクト
-const mockFromResult = vi.hoisted(() => ({ data: null, error: null }));
+const mockFromResult = vi.hoisted(() => ({ data: null as any, error: null as any }));
 
 // ----- module mocks -----
 vi.mock("@supabase/supabase-js", () => ({
@@ -199,7 +199,7 @@ describe("transcription-jobs", () => {
       const resetJob: TranscriptionJob = {
         ...mockJobItem,
         status: "queued",
-        error_message: null,
+        error_message: undefined,
         completed_chunks: 0,
         groq_retry_count: 0,
       };
