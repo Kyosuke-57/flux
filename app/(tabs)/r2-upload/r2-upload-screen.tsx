@@ -5,6 +5,7 @@ import {
   StyleSheet,
   View,
   Text,
+  TextInput,
   TouchableOpacity,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -25,8 +26,11 @@ export default function R2UploadScreen() {
 
   const {
     items,
+    filteredItems,
     loading,
     refreshing,
+    searchQuery,
+    setSearchQuery,
     formModalVisible,
     editingItem,
     formData,
@@ -60,7 +64,7 @@ export default function R2UploadScreen() {
         <EmptyState color={c} onCreate={openCreateForm} />
       ) : (
         <FlatList
-          data={items}
+          data={filteredItems}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
           refreshControl={
@@ -72,13 +76,24 @@ export default function R2UploadScreen() {
             />
           }
           ListHeaderComponent={
-            <View style={styles.headerRow}>
-              <R2UploadHeader
-                count={items.length}
-                onCreate={openCreateForm}
+            <View>
+              <SearchBar
+                value={searchQuery}
+                onChangeText={setSearchQuery}
                 color={c}
               />
+              <View style={styles.headerRow}>
+                <R2UploadHeader
+                  count={filteredItems.length}
+                  total={items.length}
+                  onCreate={openCreateForm}
+                  color={c}
+                />
+              </View>
             </View>
+          }
+          ListEmptyComponent={
+            <SearchEmptyState color={c} query={searchQuery} />
           }
           renderItem={({ item }) => (
             <R2UploadCard
@@ -105,20 +120,129 @@ export default function R2UploadScreen() {
   );
 }
 
+/** 検索バー */
+function SearchBar({
+  value,
+  onChangeText,
+  color,
+}: {
+  value: string;
+  onChangeText: (text: string) => void;
+  color: ReturnType<typeof theme>;
+}) {
+  return (
+    <View style={searchStyles.wrapper}>
+      <View
+        style={[
+          searchStyles.inputRow,
+          { backgroundColor: color.surface, borderColor: color.border },
+        ]}
+      >
+        <Ionicons
+          name="search-outline"
+          size={16}
+          color={color.textMuted}
+          style={searchStyles.icon}
+        />
+        <TextInput
+          style={[searchStyles.input, { color: color.textPrimary }]}
+          value={value}
+          onChangeText={onChangeText}
+          placeholder="ファイル名またはR2キーで検索"
+          placeholderTextColor={color.textMuted}
+          autoCapitalize="none"
+          autoCorrect={false}
+          clearButtonMode="while-editing"
+        />
+        {value.length > 0 && (
+          <TouchableOpacity onPress={() => onChangeText("")}>
+            <Ionicons
+              name="close-circle"
+              size={16}
+              color={color.textMuted}
+            />
+          </TouchableOpacity>
+        )}
+      </View>
+    </View>
+  );
+}
+
+const searchStyles = StyleSheet.create({
+  wrapper: {
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: 4,
+  },
+  inputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    height: 40,
+  },
+  icon: {
+    marginRight: 6,
+  },
+  input: {
+    flex: 1,
+    fontSize: 14,
+    height: "100%",
+  },
+});
+
+/** 検索結果が空のとき */
+function SearchEmptyState({
+  color,
+  query,
+}: {
+  color: ReturnType<typeof theme>;
+  query: string;
+}) {
+  return (
+    <View style={emptySearchStyles.centered}>
+      <Ionicons
+        name="search-outline"
+        size={40}
+        color={color.textMuted}
+      />
+      <Text style={[emptySearchStyles.text, { color: color.textSecondary }]}>
+        「{query}」に一致する結果がありません
+      </Text>
+    </View>
+  );
+}
+
+const emptySearchStyles = StyleSheet.create({
+  centered: {
+    alignItems: "center",
+    paddingTop: 60,
+    gap: 12,
+  },
+  text: {
+    fontSize: 14,
+    textAlign: "center",
+    paddingHorizontal: 32,
+  },
+});
+
 /** ヘッダー行: 件数表示 + 新規作成ボタン */
 function R2UploadHeader({
   count,
+  total,
   onCreate,
   color,
 }: {
   count: number;
+  total: number;
   onCreate: () => void;
   color: ReturnType<typeof theme>;
 }) {
   return (
     <View style={headerStyles.row}>
       <Text style={[headerStyles.count, { color: color.textSecondary }]}>
-        全 {count} 件
+        全 {total} 件{count !== total ? `（表示 ${count} 件）` : ""}
       </Text>
       <TouchableOpacity
         style={[headerStyles.addBtn, { backgroundColor: color.primary }]}

@@ -6,6 +6,7 @@
 
 import { describe, it, expect } from "vitest";
 import { formatDate, formatFileSize, getStatusLabel } from "../hooks/utils";
+import type { TranscriptionJob } from "../../../../src/types";
 
 // ─── フレームワーク動作確認 ───────────────────────────────
 
@@ -61,5 +62,123 @@ describe("formatFileSize", () => {
 
   it("1MB以上はMB表記", () => {
     expect(formatFileSize(2 * 1024 * 1024)).toBe("2.0MB");
+  });
+});
+
+// ─── 検索フィルタリングロジック ────────────────────────────
+
+describe("検索フィルタリング", () => {
+  const sampleItems: TranscriptionJob[] = [
+    {
+      id: "1",
+      user_id: "u1",
+      file_name: "meeting_notes.m4a",
+      r2_key: "audio/meeting-2026.m4a",
+      recording_id: "rec1",
+      file_size: 1024,
+      status: "completed",
+      total_chunks: 1,
+      completed_chunks: 1,
+      transcript: "",
+      error_message: null,
+      groq_retry_count: 0,
+      created_at: "2026-06-01T00:00:00Z",
+      updated_at: "2026-06-01T00:00:00Z",
+    },
+    {
+      id: "2",
+      user_id: "u1",
+      file_name: "interview_session.wav",
+      r2_key: "audio/interview-2026.wav",
+      recording_id: "rec2",
+      file_size: 2048,
+      status: "queued",
+      total_chunks: 1,
+      completed_chunks: 0,
+      transcript: null,
+      error_message: null,
+      groq_retry_count: 0,
+      created_at: "2026-06-02T00:00:00Z",
+      updated_at: "2026-06-02T00:00:00Z",
+    },
+    {
+      id: "3",
+      user_id: "u1",
+      file_name: "presentation.mp3",
+      r2_key: "audio/presentation-2026.mp3",
+      recording_id: "rec3",
+      file_size: 4096,
+      status: "failed",
+      total_chunks: 5,
+      completed_chunks: 2,
+      transcript: null,
+      error_message: "error",
+      groq_retry_count: 2,
+      created_at: "2026-06-03T00:00:00Z",
+      updated_at: "2026-06-03T00:00:00Z",
+    },
+  ];
+
+  it("空の検索クエリは全件返す", () => {
+    const q = "";
+    const result = sampleItems.filter(
+      (item) =>
+        item.file_name.toLowerCase().includes(q.toLowerCase()) ||
+        item.r2_key.toLowerCase().includes(q.toLowerCase()),
+    );
+    expect(result).toHaveLength(3);
+  });
+
+  it("ファイル名で部分一致検索できる", () => {
+    const q = "meeting";
+    const result = sampleItems.filter(
+      (item) =>
+        item.file_name.toLowerCase().includes(q.toLowerCase()) ||
+        item.r2_key.toLowerCase().includes(q.toLowerCase()),
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("1");
+  });
+
+  it("R2キーで部分一致検索できる", () => {
+    const q = "interview";
+    const result = sampleItems.filter(
+      (item) =>
+        item.file_name.toLowerCase().includes(q.toLowerCase()) ||
+        item.r2_key.toLowerCase().includes(q.toLowerCase()),
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("2");
+  });
+
+  it("大文字小文字を区別しない", () => {
+    const q = "PRESENTATION";
+    const result = sampleItems.filter(
+      (item) =>
+        item.file_name.toLowerCase().includes(q.toLowerCase()) ||
+        item.r2_key.toLowerCase().includes(q.toLowerCase()),
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("3");
+  });
+
+  it("該当なしの場合は空配列を返す", () => {
+    const q = "存在しない";
+    const result = sampleItems.filter(
+      (item) =>
+        item.file_name.toLowerCase().includes(q.toLowerCase()) ||
+        item.r2_key.toLowerCase().includes(q.toLowerCase()),
+    );
+    expect(result).toHaveLength(0);
+  });
+
+  it("R2キーでも部分一致検索できる（キーの一部）", () => {
+    const q = "audio/";
+    const result = sampleItems.filter(
+      (item) =>
+        item.file_name.toLowerCase().includes(q.toLowerCase()) ||
+        item.r2_key.toLowerCase().includes(q.toLowerCase()),
+    );
+    expect(result).toHaveLength(3);
   });
 });

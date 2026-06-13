@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Alert } from "react-native";
 import { useAuth } from "../../../../src/contexts/AuthContext";
 import { useToast } from "../../../../src/contexts/ToastContext";
@@ -34,6 +34,19 @@ export function useR2UploadData() {
   const [items, setItems] = useState<TranscriptionJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  // 検索
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const filteredItems = useMemo(() => {
+    if (!searchQuery.trim()) return items;
+    const q = searchQuery.trim().toLowerCase();
+    return items.filter(
+      (item) =>
+        item.file_name.toLowerCase().includes(q) ||
+        item.r2_key.toLowerCase().includes(q),
+    );
+  }, [items, searchQuery]);
 
   // フォームモーダル状態
   const [formModalVisible, setFormModalVisible] = useState(false);
@@ -181,8 +194,13 @@ export function useR2UploadData() {
   return {
     // データ
     items,
+    filteredItems,
     loading,
     refreshing,
+
+    // 検索
+    searchQuery,
+    setSearchQuery,
 
     // フォーム
     formModalVisible,
