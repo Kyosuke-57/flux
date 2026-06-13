@@ -53,53 +53,61 @@ export async function signOut() {
  * - Google Cloud Console で OAuth 同意画面とクライアントIDを設定
  */
 export async function signInWithGoogle() {
-  // Expo Go では exp:// スキーマのURLが使われるので、
-  // Linking.createURL で正しいリダイレクトURLを生成
-  const redirectUri = Linking.createURL("auth/callback");
+  try {
+    // Expo Go では exp:// スキーマのURLが使われるので、
+    // Linking.createURL で正しいリダイレクトURLを生成
+    const redirectUri = Linking.createURL("auth/callback");
 
-  // 1)  Supabase から OAuth URL を取得（PKCE チャレンジ自動生成）
-  const { data, error } = await supabase.auth.signInWithOAuth({
-    provider: "google",
-    options: {
-      redirectTo: redirectUri,
-      queryParams: {
-        access_type: "offline",
-        prompt: "consent",
+    // 1)  Supabase から OAuth URL を取得（PKCE チャレンジ自動生成）
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: redirectUri,
+        queryParams: {
+          access_type: "offline",
+          prompt: "consent",
+        },
       },
-    },
-  });
+    });
 
-  if (error) {
-    return { data: null, error };
-  }
+    if (error) {
+      return { data: null, error };
+    }
 
-  if (!data?.url) {
+    if (!data?.url) {
+      return {
+        data: null,
+        error: new Error("Failed to start Google sign in: no OAuth URL returned"),
+      };
+    }
+
+    // 2) システムブラウザで OAuth 画面を開く
+    const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUri);
+
+    if (result.type === "success") {
+      // セッションは AuthContext の onAuthStateChange リスナーが自動検出する
+      // 成功時は data を返す
+      return { data, error: null };
+    }
+
+    if (result.type === "cancel") {
+      return {
+        data: null,
+        error: new Error("Google sign in was cancelled"),
+      };
+    }
+
     return {
       data: null,
-      error: new Error("Failed to start Google sign in: no OAuth URL returned"),
+      error: new Error("Failed to sign in with Google"),
     };
+  } catch (err) {
+    const message =
+      err instanceof Error
+        ? err.message
+        : "An unexpected error occurred during Google sign in";
+    return { data: null, error: new Error(message) };
   }
-
-  // 2) システムブラウザで OAuth 画面を開く
-  const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUri);
-
-  if (result.type === "success") {
-    // セッションは AuthContext の onAuthStateChange リスナーが自動検出する
-    // 成功時は data を返す
-    return { data, error: null };
-  }
-
-  if (result.type === "cancel") {
-    return {
-      data: null,
-      error: new Error("Google sign in was cancelled"),
-    };
-  }
-
-  return {
-    data: null,
-    error: new Error("Failed to sign in with Google"),
-  };
 }
 
 export async function getCurrentUser() {
