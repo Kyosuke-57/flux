@@ -46,21 +46,27 @@ export async function createAuthData(
   label: string,
   api_key: string,
 ) {
-  const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError };
+  try {
+    const { user, error: authError } = await requireUser();
+    if (authError || !user) return { data: null, error: authError };
 
-  const { data, error } = await supabase
-    .from("auth_data")
-    .insert({
-      user_id: user.id,
-      provider,
-      label,
-      api_key,
-    })
-    .select()
-    .single();
+    const { data, error } = await supabase
+      .from("auth_data")
+      .insert({
+        user_id: user.id,
+        provider,
+        label,
+        api_key,
+      })
+      .select()
+      .single();
 
-  return { data: data as AuthData | null, error };
+    return { data: data as AuthData | null, error };
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "不明なエラーが発生しました";
+    return { data: null, error: new Error(`createAuthData: ${message}`) };
+  }
 }
 
 export async function updateAuthData(
