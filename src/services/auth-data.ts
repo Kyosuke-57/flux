@@ -94,14 +94,20 @@ export async function updateAuthData(
 }
 
 export async function deleteAuthData(id: string) {
-  const { user, error: authError } = await requireUser();
-  if (authError || !user) return { error: authError };
+  try {
+    const { user, error: authError } = await requireUser();
+    if (authError || !user) return { error: authError };
 
-  const { error } = await supabase
-    .from("auth_data")
-    .delete()
-    .eq("id", id)
-    .eq("user_id", user.id);
+    const { error } = await supabase
+      .from("auth_data")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", user.id);
 
-  return { error };
+    return { error };
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "不明なエラーが発生しました";
+    return { error: new Error(`deleteAuthData: ${message}`) };
+  }
 }
