@@ -123,38 +123,47 @@ export async function getUsageRemaining(): Promise<{ remaining: number | null; e
  * Increments the current user's monthly_usage_seconds by the given amount.
  */
 export async function updateUsage(secondsToAdd: number) {
-  const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError };
+  try {
+    const { user, error: authError } = await requireUser();
+    if (authError || !user) return { data: null, error: authError };
 
-  const { data, error } = await supabase.rpc("increment_usage", {
-    user_id: user.id,
-    seconds: secondsToAdd,
-  });
+    const { data, error } = await supabase.rpc("increment_usage", {
+      user_id: user.id,
+      seconds: secondsToAdd,
+    });
 
-  if (error) {
-    // Fallback: directly update the row if the RPC doesn't exist
-    const { data: current, error: fetchError } = await supabase
-      .from("users")
-      .select("monthly_usage_seconds")
-      .eq("id", user.id)
-      .single();
+    if (error) {
+      // Fallback: directly update the row if the RPC doesn't exist
+      const { data: current, error: fetchError } = await supabase
+        .from("users")
+        .select("monthly_usage_seconds")
+        .eq("id", user.id)
+        .single();
 
-    if (fetchError) {
-      return { data: null, error: fetchError };
+      if (fetchError) {
+        return { data: null, error: fetchError };
+      }
+
+      const currentSeconds = current.monthly_usage_seconds ?? 0;
+      const { data: updateData, error: updateError } = await supabase
+        .from("users")
+        .update({ monthly_usage_seconds: currentSeconds + secondsToAdd })
+        .eq("id", user.id)
+        .select()
+        .single();
+
+      return { data: updateData, error: updateError };
     }
 
-    const currentSeconds = current.monthly_usage_seconds ?? 0;
-    const { data: updateData, error: updateError } = await supabase
-      .from("users")
-      .update({ monthly_usage_seconds: currentSeconds + secondsToAdd })
-      .eq("id", user.id)
-      .select()
-      .single();
-
-    return { data: updateData, error: updateError };
+    return { data, error: null };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "不明なエラー";
+    console.error("updateUsage: 予期しないエラーが発生しました", error);
+    return {
+      data: null,
+      error: new Error(`使用量の更新に失敗しました: ${message}`),
+    };
   }
-
-  return { data, error: null };
 }
 
 /**
