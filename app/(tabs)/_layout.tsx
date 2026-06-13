@@ -105,6 +105,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="subscription"
+        options={{
+          title: "サブスク",
+          tabBarIcon: ({ focused }) => <TabIcon icon="card" focused={focused} c={c} />,
+        }}
+      />
+      <Tabs.Screen
         name="pipeline-manager"
         options={{
           title: "パイプライン",
