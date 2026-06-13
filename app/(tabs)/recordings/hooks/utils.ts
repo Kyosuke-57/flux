@@ -1,6 +1,10 @@
 /**
  * Recordings screen utility functions
  */
+import type { Recording } from "../../../../src/types";
+
+export type SortKey = "date" | "name" | "status";
+export type SortOrder = "asc" | "desc";
 
 export function formatDate(iso: string): string {
   const d = new Date(iso);
@@ -25,4 +29,28 @@ export function getDurationLabel(seconds: number): string {
 
 export function getTranscribedLabel(transcribed: boolean): string {
   return transcribed ? "完了" : "未";
+}
+
+export function sortRecordings(
+  items: Recording[],
+  key: SortKey,
+  order: SortOrder,
+): Recording[] {
+  const sorted = [...items];
+  sorted.sort((a, b) => {
+    let cmp: number;
+    switch (key) {
+      case "date":
+        cmp = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        break;
+      case "name":
+        cmp = a.title.localeCompare(b.title, "ja");
+        break;
+      case "status":
+        cmp = Number(a.transcribed) - Number(b.transcribed);
+        break;
+    }
+    return order === "asc" ? cmp : -cmp;
+  });
+  return sorted;
 }

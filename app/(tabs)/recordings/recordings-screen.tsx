@@ -19,6 +19,8 @@ import { RecordingCard } from "./components/recording-card";
 import { RecordingFormModal } from "./components/recording-form-modal";
 import { EmptyState } from "./components/empty-state";
 import { LoadingSkeleton, UnauthenticatedView } from "./components/skeleton-state";
+import { sortRecordings } from "./hooks/utils";
+import type { SortKey, SortOrder } from "./hooks/utils";
 
 export default function RecordingsScreen() {
   const { settings } = useSettings();
@@ -45,11 +47,27 @@ export default function RecordingsScreen() {
   } = useRecordingsData();
 
   const [search, setSearch] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("date");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortOrder("desc");
+    }
+  };
+
+  const sortedItems = React.useMemo(
+    () => sortRecordings(items, sortKey, sortOrder),
+    [items, sortKey, sortOrder],
+  );
 
   const filteredItems = React.useMemo(() => {
-    if (!search.trim()) return items;
+    if (!search.trim()) return sortedItems;
     const q = search.toLowerCase();
-    return items.filter(
+    return sortedItems.filter(
       (i) =>
         i.title.toLowerCase().includes(q) ||
         (i.file_path && i.file_path.toLowerCase().includes(q)),
@@ -103,6 +121,45 @@ export default function RecordingsScreen() {
             </TouchableOpacity>
           )}
         </View>
+      </View>
+
+      {/* Sort controls */}
+      <View style={[styles.sortBar, { backgroundColor: c.background }]}>
+        {(["date", "name", "status"] as const).map((key) => {
+          const active = sortKey === key;
+          const labels: Record<SortKey, string> = {
+            date: "日付",
+            name: "名前",
+            status: "ステータス",
+          };
+          return (
+            <TouchableOpacity
+              key={key}
+              style={[
+                styles.sortChip,
+                { backgroundColor: active ? c.primaryBg : c.surfaceSecondary },
+              ]}
+              onPress={() => toggleSort(key)}
+              activeOpacity={0.7}
+            >
+              <Text
+                style={[
+                  styles.sortChipText,
+                  { color: active ? c.primary : c.textSecondary },
+                ]}
+              >
+                {labels[key]}
+              </Text>
+              {active && (
+                <Ionicons
+                  name={sortOrder === "asc" ? "arrow-up" : "arrow-down"}
+                  size={12}
+                  color={c.primary}
+                />
+              )}
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
       {/* List */}
@@ -188,6 +245,26 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     paddingVertical: 0,
+  },
+
+  // Sort controls
+  sortBar: {
+    flexDirection: "row",
+    paddingHorizontal: 24,
+    paddingBottom: 8,
+    gap: 8,
+  },
+  sortChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  sortChipText: {
+    fontSize: 13,
+    fontWeight: "600",
   },
 
   // Section header

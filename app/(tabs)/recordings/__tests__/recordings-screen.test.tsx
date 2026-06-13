@@ -5,7 +5,13 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { formatDate, getDurationLabel, getTranscribedLabel } from "../hooks/utils";
+import {
+  formatDate,
+  getDurationLabel,
+  getTranscribedLabel,
+  sortRecordings,
+} from "../hooks/utils";
+import type { Recording } from "../../../../src/types";
 
 // ─── Framework ───────────────────────────────────────────────
 
@@ -75,5 +81,97 @@ describe("getTranscribedLabel", () => {
 
   it('returns "未" for false', () => {
     expect(getTranscribedLabel(false)).toBe("未");
+  });
+});
+
+// ─── sortRecordings ───────────────────────────────────────────
+
+function makeMockRecording(overrides: Partial<Recording>): Recording {
+  return {
+    id: "test-id",
+    user_id: "user-1",
+    title: "Test Recording",
+    file_path: "/test/path.mp3",
+    duration_seconds: 120,
+    created_at: "2026-06-12T10:00:00Z",
+    transcribed: false,
+    ...overrides,
+  };
+}
+
+describe("sortRecordings", () => {
+  const items: Recording[] = [
+    makeMockRecording({
+      id: "1",
+      title: "あお",
+      created_at: "2026-06-10T00:00:00Z",
+      transcribed: false,
+    }),
+    makeMockRecording({
+      id: "2",
+      title: "いし",
+      created_at: "2026-06-12T00:00:00Z",
+      transcribed: true,
+    }),
+    makeMockRecording({
+      id: "3",
+      title: "うみ",
+      created_at: "2026-06-11T00:00:00Z",
+      transcribed: false,
+    }),
+  ];
+
+  describe("by date", () => {
+    it("sorts ascending (oldest first)", () => {
+      const result = sortRecordings(items, "date", "asc");
+      expect(result[0].id).toBe("1");
+      expect(result[1].id).toBe("3");
+      expect(result[2].id).toBe("2");
+    });
+
+    it("sorts descending (newest first)", () => {
+      const result = sortRecordings(items, "date", "desc");
+      expect(result[0].id).toBe("2");
+      expect(result[1].id).toBe("3");
+      expect(result[2].id).toBe("1");
+    });
+  });
+
+  describe("by name", () => {
+    it("sorts ascending (あいうえお順)", () => {
+      const result = sortRecordings(items, "name", "asc");
+      expect(result[0].id).toBe("1"); // あお
+      expect(result[1].id).toBe("2"); // いし
+      expect(result[2].id).toBe("3"); // うみ
+    });
+
+    it("sorts descending", () => {
+      const result = sortRecordings(items, "name", "desc");
+      expect(result[0].id).toBe("3"); // うみ
+      expect(result[1].id).toBe("2"); // いし
+      expect(result[2].id).toBe("1"); // あお
+    });
+  });
+
+  describe("by status", () => {
+    it("sorts ascending (未完了 → 完了)", () => {
+      const result = sortRecordings(items, "status", "asc");
+      expect(result[0].transcribed).toBe(false);
+      expect(result[1].transcribed).toBe(false);
+      expect(result[2].transcribed).toBe(true);
+    });
+
+    it("sorts descending (完了 → 未完了)", () => {
+      const result = sortRecordings(items, "status", "desc");
+      expect(result[0].transcribed).toBe(true);
+      expect(result[1].transcribed).toBe(false);
+      expect(result[2].transcribed).toBe(false);
+    });
+  });
+
+  it("does not mutate the original array", () => {
+    const original = [...items];
+    sortRecordings(items, "date", "asc");
+    expect(items).toEqual(original);
   });
 });
