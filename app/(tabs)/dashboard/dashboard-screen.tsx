@@ -38,6 +38,8 @@ export default function DashboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [sortField, setSortField] = useState<"date" | "name" | "status">("date");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
 
   const fetchDashboard = useCallback(async () => {
     if (!user) {
@@ -84,6 +86,27 @@ export default function DashboardScreen() {
       return nameMatch || statusMatch || typeMatch;
     });
   }, [searchQuery, recentActivity]);
+
+  const sortedActivities = useMemo(() => {
+    const sorted = [...filteredActivities];
+    const dir = sortDirection === "asc" ? 1 : -1;
+    sorted.sort((a, b) => {
+      switch (sortField) {
+        case "date":
+          return (new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()) * dir;
+        case "name":
+          return a.title.localeCompare(b.title) * dir;
+        case "status": {
+          const sa = a.status ?? "";
+          const sb = b.status ?? "";
+          return sa.localeCompare(sb) * dir;
+        }
+        default:
+          return 0;
+      }
+    });
+    return sorted;
+  }, [filteredActivities, sortField, sortDirection]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -262,13 +285,104 @@ export default function DashboardScreen() {
           </FadeInView>
         )}
 
+        {/* Sort Controls */}
+        <FadeInView delay={280}>
+          <View style={styles.sortRow}>
+            {/* Sort field buttons */}
+            <View style={styles.sortFieldGroup}>
+              {(["date", "name", "status"] as const).map((field) => (
+                <TouchableOpacity
+                  key={field}
+                  style={[
+                    styles.sortFieldButton,
+                    sortField === field && {
+                      backgroundColor: c.primary + "18",
+                      borderColor: c.primary,
+                    },
+                    { borderColor: c.border },
+                  ]}
+                  onPress={() => {
+                    haptics.lightTap();
+                    if (sortField === field) {
+                      setSortDirection((d) => (d === "asc" ? "desc" : "asc"));
+                    } else {
+                      setSortField(field);
+                      setSortDirection(field === "date" ? "desc" : "asc");
+                    }
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons
+                    name={
+                      field === "date"
+                        ? "calendar-outline"
+                        : field === "name"
+                          ? "text-outline"
+                          : "flag-outline"
+                    }
+                    size={13}
+                    color={
+                      sortField === field ? c.primary : c.textMuted
+                    }
+                    style={styles.sortFieldIcon}
+                  />
+                  <Text
+                    style={[
+                      styles.sortFieldLabel,
+                      {
+                        color:
+                          sortField === field ? c.primary : c.textSecondary,
+                      },
+                    ]}
+                  >
+                    {field === "date"
+                      ? "日付"
+                      : field === "name"
+                        ? "名前"
+                        : "ステータス"}
+                  </Text>
+                  {sortField === field && (
+                    <Ionicons
+                      name={
+                        sortDirection === "asc"
+                          ? "chevron-up"
+                          : "chevron-down"
+                      }
+                      size={12}
+                      color={c.primary}
+                      style={styles.sortFieldChevron}
+                    />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Direction toggle */}
+            <TouchableOpacity
+              style={[styles.sortDirButton, { borderColor: c.border }]}
+              onPress={() => {
+                haptics.lightTap();
+                setSortDirection((d) => (d === "asc" ? "desc" : "asc"));
+              }}
+              activeOpacity={0.7}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons
+                name={sortDirection === "asc" ? "arrow-up" : "arrow-down"}
+                size={15}
+                color={c.textSecondary}
+              />
+            </TouchableOpacity>
+          </View>
+        </FadeInView>
+
         {/* Section 2: Recent Activity */}
         <FadeInView delay={300}>
           <View style={styles.sectionHeader}>
             <Text style={[styles.sectionTitle, { color: c.textPrimary }]}>最近のアクティビティ</Text>
           </View>
           <RecentActivity
-            activities={filteredActivities}
+            activities={sortedActivities}
             color={c}
             onPress={(id, type) => {
               haptics.lightTap();
@@ -334,6 +448,45 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: Spacing.md,
     paddingBottom: Spacing.sm,
+  },
+
+  /* Sort controls */
+  sortRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: Spacing.xxl,
+    marginTop: Spacing.lg,
+  },
+  sortFieldGroup: {
+    flexDirection: "row",
+    gap: Spacing.sm,
+  },
+  sortFieldButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+  },
+  sortFieldIcon: {
+    marginRight: 4,
+  },
+  sortFieldLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  sortFieldChevron: {
+    marginLeft: 2,
+  },
+  sortDirButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   /* Usage bar */
