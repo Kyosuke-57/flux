@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   FlatList,
   StyleSheet,
   RefreshControl,
+  TextInput,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -81,6 +82,19 @@ export default function CalendarScreen() {
     onRefresh,
   } = useCalendar();
 
+  // ── 検索 ──
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const filteredMinutes = useMemo(() => {
+    if (!searchQuery.trim()) return selectedMinutes;
+    const q = searchQuery.trim().toLowerCase();
+    return selectedMinutes.filter(
+      (m) =>
+        m.title.toLowerCase().includes(q) ||
+        m.content.toLowerCase().includes(q),
+    );
+  }, [selectedMinutes, searchQuery]);
+
   // ── 未認証 ──
   if (!user) {
     return (
@@ -106,7 +120,7 @@ export default function CalendarScreen() {
       edges={["top", "left", "right"]}
     >
       <FlatList
-        data={selectedMinutes}
+        data={filteredMinutes}
         keyExtractor={(item) => item.id}
         refreshControl={
           <RefreshControl
@@ -148,6 +162,42 @@ export default function CalendarScreen() {
               color={c}
             />
 
+            {/* ── 検索バー ── */}
+            <View
+              style={[
+                styles.searchContainer,
+                { backgroundColor: c.surface, borderColor: c.border },
+              ]}
+            >
+              <Ionicons
+                name="search"
+                size={18}
+                color={c.textMuted}
+                style={styles.searchIcon}
+              />
+              <TextInput
+                style={[styles.searchInput, { color: c.textPrimary }]}
+                placeholder="タイトルまたは内容で検索"
+                placeholderTextColor={c.textMuted}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              {searchQuery.length > 0 && (
+                <TouchableOpacity
+                  onPress={() => setSearchQuery("")}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Ionicons
+                    name="close-circle"
+                    size={18}
+                    color={c.textMuted}
+                  />
+                </TouchableOpacity>
+              )}
+            </View>
+
             {/* ── 選択日ラベル ── */}
             {selectedDateKey && (
               <View style={styles.selectedDateSection}>
@@ -155,7 +205,7 @@ export default function CalendarScreen() {
                   {formatDateLabel(selectedDateKey)}
                 </Text>
                 <Text style={[styles.minuteCount, { color: c.textMuted }]}>
-                  {selectedMinutes.length} 件
+                  {filteredMinutes.length} 件
                 </Text>
               </View>
             )}
@@ -164,9 +214,15 @@ export default function CalendarScreen() {
         ListEmptyComponent={
           selectedDateKey && !loading ? (
             <View style={styles.emptyContainer}>
-              <Ionicons name="calendar-outline" size={32} color={c.textMuted} />
+              <Ionicons
+                name={searchQuery ? "search-outline" : "calendar-outline"}
+                size={32}
+                color={c.textMuted}
+              />
               <Text style={[styles.emptySubtext, { color: c.textSecondary }]}>
-                この日の議事録はありません
+                {searchQuery
+                  ? "検索条件に一致する議事録がありません"
+                  : "この日の議事録はありません"}
               </Text>
             </View>
           ) : null
@@ -201,6 +257,24 @@ const styles = StyleSheet.create({
   monthLabel: {
     fontSize: 18,
     fontWeight: "700",
+  },
+
+  /* 検索バー */
+  searchContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginHorizontal: 24,
+    marginTop: 12,
+    paddingHorizontal: 12,
+    height: 40,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+  },
+  searchIcon: { marginRight: 8 },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    paddingVertical: 0,
   },
 
   /* 選択日 */
