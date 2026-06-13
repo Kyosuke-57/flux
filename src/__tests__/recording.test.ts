@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+
 // ---- Mock external packages (same pattern as removeHallucinations.test.ts) ----
 
 vi.mock("@supabase/supabase-js", () => ({
@@ -50,7 +51,12 @@ vi.mock("expo-audio", () => ({
   AudioModule: {
     requestRecordingPermissionsAsync: vi
       .fn()
-      .mockResolvedValue({ granted: true }),
+      .mockResolvedValue({
+        granted: true,
+        status: "granted" as PermissionStatus,
+        expires: "never" as const,
+        canAskAgain: true,
+      }),
     AudioRecorder: vi.fn(function () { return mockRecorderInstance; }),
   },
   RecordingPresets: {
@@ -75,6 +81,7 @@ vi.mock("expo-document-picker", () => ({
 import { AudioModule, setAudioModeAsync } from "expo-audio";
 import * as DocumentPicker from "expo-document-picker";
 import type { RecordingResult, RecordingState } from "../services/recording-types";
+import type { PermissionStatus } from "expo-modules-core";
 
 type RecordingModule = typeof import("../services/recording");
 let recording: RecordingModule;
@@ -114,7 +121,12 @@ describe("startRecording", () => {
   it("マイク許可がない場合はエラーを投げる", async () => {
     vi.mocked(
       AudioModule.requestRecordingPermissionsAsync,
-    ).mockResolvedValueOnce({ granted: false });
+    ).mockResolvedValueOnce({
+      granted: false,
+      status: "denied" as PermissionStatus,
+      expires: "never" as const,
+      canAskAgain: true,
+    });
     await expect(recording.startRecording()).rejects.toThrow(
       "Microphone permission was denied",
     );
