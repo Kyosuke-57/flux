@@ -111,8 +111,14 @@ export async function signInWithGoogle() {
 }
 
 export async function getCurrentUser() {
-  const { data, error } = await supabase.auth.getUser();
-  return { user: data?.user ?? null, error };
+  try {
+    const { data, error } = await supabase.auth.getUser();
+    return { user: data?.user ?? null, error };
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "An unexpected error occurred while fetching current user";
+    return { user: null, error: new Error(message) };
+  }
 }
 
 export async function getSession() {
