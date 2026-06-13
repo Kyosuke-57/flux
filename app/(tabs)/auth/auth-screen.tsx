@@ -1,6 +1,7 @@
-import React from "react";
-import { FlatList, RefreshControl, TouchableOpacity, StyleSheet, View } from "react-native";
+import React, { useMemo, useState } from "react";
+import { FlatList, RefreshControl, TouchableOpacity, StyleSheet, View, TextInput, Text } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../../../src/contexts/AuthContext";
 import { useSettings } from "../../../src/contexts/SettingsContext";
 import { theme } from "../../../src/theme";
@@ -9,6 +10,7 @@ import { AuthCard } from "./components/auth-card";
 import { EmptyState } from "./components/empty-state";
 import { LoadingSkeleton, UnauthenticatedView } from "./components/skeleton-state";
 import { FormModal } from "./components/form-modal";
+import { filterAuthData } from "./hooks/utils";
 
 export default function AuthScreen() {
   const { settings } = useSettings();
@@ -37,6 +39,13 @@ export default function AuthScreen() {
     onRefresh,
   } = useAuthData();
 
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const filteredItems = useMemo(
+    () => filterAuthData(items, searchQuery),
+    [items, searchQuery],
+  );
+
   // ── Loading ──
   if (loading) {
     return <LoadingSkeleton color={c} />;
@@ -53,12 +62,43 @@ export default function AuthScreen() {
       style={[styles.container, { backgroundColor: c.background }]}
       edges={["top", "left", "right"]}
     >
+      {/* 検索バー */}
+      {items.length > 0 && (
+        <View style={[styles.searchContainer, { backgroundColor: c.background }]}>
+          <View style={[styles.searchBar, { backgroundColor: c.surface, borderColor: c.border }]}>
+            <Ionicons name="search" size={18} color={c.textMuted} style={styles.searchIcon} />
+            <TextInput
+              style={[styles.searchInput, { color: c.textPrimary }]}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder="名前またはプロバイダで検索..."
+              placeholderTextColor={c.textMuted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              clearButtonMode="while-editing"
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery("")} style={styles.searchClear}>
+                <Ionicons name="close-circle" size={18} color={c.textMuted} />
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      )}
+
       {/* 空状態 */}
       {items.length === 0 ? (
         <EmptyState onAdd={openCreateForm} color={c} />
+      ) : filteredItems.length === 0 ? (
+        <View style={styles.emptySearch}>
+          <Ionicons name="search-outline" size={40} color={c.textMuted} />
+          <Text style={[styles.emptySearchText, { color: c.textSecondary }]}>
+            「{searchQuery}」に一致するデータがありません
+          </Text>
+        </View>
       ) : (
         <FlatList
-          data={items}
+          data={filteredItems}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
           refreshControl={
@@ -69,11 +109,7 @@ export default function AuthScreen() {
               colors={[c.primary]}
             />
           }
-          ListHeaderComponent={
-            <View style={styles.headerRow}>
-              {/* タイトルはScreen名としてタブに任せる */}
-            </View>
-          }
+          ListHeaderComponent={<View style={styles.headerRow} />}
           renderItem={({ item }) => (
             <AuthCard
               item={item}
@@ -126,6 +162,43 @@ const styles = StyleSheet.create({
   list: { paddingBottom: 80 },
   headerRow: {
     paddingTop: 16,
+  },
+  searchContainer: {
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: 4,
+  },
+  searchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    height: 44,
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    paddingVertical: 0,
+  },
+  searchClear: {
+    marginLeft: 4,
+    padding: 2,
+  },
+  emptySearch: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 32,
+  },
+  emptySearchText: {
+    fontSize: 14,
+    textAlign: "center",
+    marginTop: 12,
+    lineHeight: 20,
   },
   fabContainer: {
     position: "absolute",

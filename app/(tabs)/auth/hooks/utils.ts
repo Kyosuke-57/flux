@@ -35,4 +35,16 @@ export function sortAuthData(list: AuthDTO[]): AuthDTO[] {
   );
 }
 
+export function filterAuthData(list: AuthDTO[], query: string): AuthDTO[] {
+  if (!query.trim()) return list;
+  const q = query.trim().toLowerCase();
+  return list.filter(
+    (item) =>
+      item.label.toLowerCase().includes(q) ||
+      item.provider.toLowerCase().includes(q) ||
+      getProviderLabel(item.provider).toLowerCase().includes(q) ||
+      item.api_key.toLowerCase().includes(q),
+  );
+}
+
 export type AuthDTO = AuthData;

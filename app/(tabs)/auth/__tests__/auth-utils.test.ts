@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatDate, maskApiKey, getProviderLabel, sortAuthData } from "../hooks/utils";
+import { formatDate, maskApiKey, getProviderLabel, sortAuthData, filterAuthData } from "../hooks/utils";
 import type { AuthData } from "../../../../src/types";
 
 describe("maskApiKey", () => {
@@ -62,5 +62,66 @@ describe("sortAuthData", () => {
     const copy = [...items];
     sortAuthData(items);
     expect(items).toEqual(copy);
+  });
+});
+
+describe("filterAuthData", () => {
+  const items = [
+    { id: "1", label: "OpenAI API Key", provider: "openai", api_key: "sk-xxx" },
+    { id: "2", label: "Anthropic Claude", provider: "anthropic", api_key: "sk-ant-xxx" },
+    { id: "3", label: "Gemini Keys", provider: "google", api_key: "AIza-xxx" },
+    { id: "4", label: "カスタムAPI", provider: "custom", api_key: "cus-xxx" },
+  ] as AuthData[];
+
+  it("空クエリは全件返す", () => {
+    expect(filterAuthData(items, "")).toHaveLength(4);
+    expect(filterAuthData(items, "   ")).toHaveLength(4);
+  });
+
+  it("labelで絞り込む（部分一致・大文字小文字区別なし）", () => {
+    const result = filterAuthData(items, "openai");
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("1");
+  });
+
+  it("providerのvalueで絞り込む", () => {
+    const result = filterAuthData(items, "google");
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("3");
+  });
+
+  it("providerの表示ラベルで絞り込む（getProviderLabel経由）", () => {
+    const result = filterAuthData(items, "Anthropic");
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("2");
+  });
+
+  it("カスタムのラベル「カスタム」で検索できる", () => {
+    const result = filterAuthData(items, "カスタム");
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("4");
+  });
+
+  it("部分一致で検索できる", () => {
+    const result = filterAuthData(items, "API");
+    expect(result).toHaveLength(2);
+    expect(result.map((r) => r.id).sort()).toEqual(["1", "4"]);
+  });
+
+  it("api_keyの内容で絞り込む", () => {
+    const result = filterAuthData(items, "sk-ant");
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("2");
+  });
+
+  it("api_keyの部分一致で絞り込む", () => {
+    const result = filterAuthData(items, "AIza");
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("3");
+  });
+
+  it("該当なしの場合は空配列を返す", () => {
+    const result = filterAuthData(items, "nonexistent");
+    expect(result).toHaveLength(0);
   });
 });
