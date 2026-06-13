@@ -31,16 +31,24 @@ export async function getAllFolders() {
  * @param name フォルダ名（必須）
  */
 export async function createFolder(name: string) {
-  const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError };
+  try {
+    const { user, error: authError } = await requireUser();
+    if (authError || !user) return { data: null, error: authError };
 
-  const { data, error } = await supabase
-    .from("folders")
-    .insert({ name, user_id: user.id })
-    .select()
-    .single();
+    const { data, error } = await supabase
+      .from("folders")
+      .insert({ name, user_id: user.id })
+      .select()
+      .single();
 
-  return { data: data as Folder | null, error };
+    if (error) return { data: null, error };
+
+    return { data: data as Folder | null, error: null };
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "フォルダの作成中に予期しないエラーが発生しました";
+    return { data: null, error: new Error(message) };
+  }
 }
 
 /**
