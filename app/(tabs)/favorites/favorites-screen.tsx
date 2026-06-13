@@ -1,10 +1,11 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   FlatList,
   RefreshControl,
   StyleSheet,
   View,
   Text,
+  TextInput,
   TouchableOpacity,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -35,6 +36,22 @@ export default function FavoritesScreen() {
     getTagName,
   } = useFavoritesData();
 
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const filteredFavorites = useMemo(
+    () =>
+      searchQuery.trim() === ""
+        ? favorites
+        : favorites.filter((item) => {
+            const q = searchQuery.toLowerCase();
+            return (
+              item.title.toLowerCase().includes(q) ||
+              item.content.toLowerCase().includes(q)
+            );
+          }),
+    [favorites, searchQuery],
+  );
+
   // ── Loading ──
   if (loading) {
     return <LoadingSkeleton color={c} />;
@@ -63,12 +80,43 @@ export default function FavoritesScreen() {
         <Ionicons name="heart" size={28} color={c.primary} />
       </View>
 
+      {/* 検索バー */}
+      {favorites.length > 0 && (
+        <View style={[styles.searchContainer, { backgroundColor: c.background }]}>
+          <View style={[styles.searchBar, { backgroundColor: c.surface, borderColor: c.border }]}>
+            <Ionicons name="search" size={18} color={c.textMuted} style={styles.searchIcon} />
+            <TextInput
+              style={[styles.searchInput, { color: c.textPrimary }]}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder="名前または内容で検索..."
+              placeholderTextColor={c.textMuted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              clearButtonMode="while-editing"
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery("")} style={styles.searchClear}>
+                <Ionicons name="close-circle" size={18} color={c.textMuted} />
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      )}
+
       {/* 一覧 / 空状態 */}
       {favorites.length === 0 ? (
         <EmptyState color={c} />
+      ) : filteredFavorites.length === 0 ? (
+        <View style={styles.searchEmpty}>
+          <Ionicons name="search-outline" size={40} color={c.textMuted} />
+          <Text style={[styles.searchEmptyText, { color: c.textSecondary }]}>
+            「{searchQuery}」に一致する議事録がありません
+          </Text>
+        </View>
       ) : (
         <FlatList
-          data={favorites}
+          data={filteredFavorites}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
           refreshControl={
@@ -159,5 +207,43 @@ const styles = StyleSheet.create({
   tagsRow: { flexDirection: "row", marginTop: 8, gap: 5 },
   tag: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 5 },
   tagText: { fontSize: 10, fontWeight: "500" },
+
+  searchContainer: {
+    paddingHorizontal: Spacing.xxl,
+    paddingTop: 4,
+    paddingBottom: 4,
+  },
+  searchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    height: 44,
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    paddingVertical: 0,
+  },
+  searchClear: {
+    marginLeft: 4,
+    padding: 2,
+  },
+  searchEmpty: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 32,
+  },
+  searchEmptyText: {
+    fontSize: 14,
+    textAlign: "center",
+    marginTop: 12,
+    lineHeight: 20,
+  },
 
 });
