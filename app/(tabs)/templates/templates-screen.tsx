@@ -8,6 +8,7 @@ import { theme } from "../../../src/theme";
 import { useTemplatesData } from "./hooks/use-templates-data";
 import { TemplateCard } from "./components/template-card";
 import { TemplateFormModal } from "./components/template-form-modal";
+import { SortControls } from "./components/sort-controls";
 import { EmptyState } from "./components/empty-state";
 import { LoadingSkeleton } from "./components/skeleton-state";
 
@@ -19,12 +20,15 @@ export default function TemplatesScreen() {
   const {
     filteredTemplates,
     search,
+    sortField,
+    sortDirection,
     loading,
     refreshing,
     formModalVisible,
     editingTemplate,
     setSearch,
     onRefresh,
+    handleSort,
     handleOpenCreate,
     handleOpenEdit,
     handleCloseForm,
@@ -73,6 +77,14 @@ export default function TemplatesScreen() {
           <Ionicons name="add" size={22} color={c.textInverse} />
         </TouchableOpacity>
       </View>
+
+      {/* ソート */}
+      <SortControls
+        sortField={sortField}
+        sortDirection={sortDirection}
+        onSort={handleSort}
+        color={c}
+      />
 
       {/* 一覧 */}
       {filteredTemplates.length === 0 && !search ? (

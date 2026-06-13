@@ -21,6 +21,8 @@ export function useTemplatesData() {
 
   // ── UI状態 ──
   const [search, setSearch] = useState("");
+  const [sortField, setSortField] = useState<"updated_at" | "name" | "is_default">("updated_at");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -54,14 +56,39 @@ export function useTemplatesData() {
     fetchData();
   }, [fetchData]);
 
-  // ── 検索フィルタリング ──
-  const filteredTemplates = search.trim()
-    ? templates.filter(
-        (t) =>
-          t.name.toLowerCase().includes(search.toLowerCase()) ||
-          t.content.toLowerCase().includes(search.toLowerCase()),
-      )
-    : templates;
+  const handleSort = useCallback((field: "updated_at" | "name" | "is_default") => {
+    setSortField((prev) => {
+      if (prev === field) {
+        setSortDirection((d) => (d === "asc" ? "desc" : "asc"));
+        return prev;
+      }
+      setSortDirection("desc");
+      return field;
+    });
+  }, []);
+
+  // ── 検索フィルタリング + ソート ──
+  const filteredTemplates = (() => {
+    const filtered = search.trim()
+      ? templates.filter(
+          (t) =>
+            t.name.toLowerCase().includes(search.toLowerCase()) ||
+            t.content.toLowerCase().includes(search.toLowerCase()),
+        )
+      : templates;
+
+    return [...filtered].sort((a, b) => {
+      let cmp = 0;
+      if (sortField === "name") {
+        cmp = a.name.localeCompare(b.name, "ja");
+      } else if (sortField === "is_default") {
+        cmp = Number(b.is_default) - Number(a.is_default);
+      } else {
+        cmp = new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime();
+      }
+      return sortDirection === "asc" ? cmp : -cmp;
+    });
+  })();
 
   // ── モーダルを開く（作成） ──
   const handleOpenCreate = useCallback(() => {
@@ -194,6 +221,8 @@ export function useTemplatesData() {
     templates,
     filteredTemplates,
     search,
+    sortField,
+    sortDirection,
     loading,
     refreshing,
     formModalVisible,
@@ -205,6 +234,7 @@ export function useTemplatesData() {
     // アクション
     fetchData,
     onRefresh,
+    handleSort,
     handleOpenCreate,
     handleOpenEdit,
     handleCloseForm,
