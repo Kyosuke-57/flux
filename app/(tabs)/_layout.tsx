@@ -119,6 +119,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="history"
+        options={{
+          title: "履歴",
+          tabBarIcon: ({ focused }) => <TabIcon icon="time" focused={focused} c={c} />,
+        }}
+      />
+      <Tabs.Screen
         name="calendar"
         options={{
           title: "カレンダー",
