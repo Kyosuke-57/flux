@@ -27,11 +27,16 @@ export default function SearchScreen() {
   const c = theme(settings.isDarkMode);
   const { user } = useAuth();
 
+  type SortField = "date" | "name" | "status";
+  type SortDirection = "asc" | "desc";
+
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResultItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+  const [sortField, setSortField] = useState<SortField>("date");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef(false);
@@ -105,18 +110,48 @@ export default function SearchScreen() {
     }
   }, []);
 
-  // ── 結果を種類でグループ化 ──
+  // ── ソート ──
+  const sortedResults = useMemo(() => {
+    const sorted = [...results];
+    sorted.sort((a, b) => {
+      let cmp = 0;
+      switch (sortField) {
+        case "date":
+          cmp = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+          break;
+        case "name":
+          cmp = a.title.localeCompare(b.title, "ja");
+          break;
+        case "status":
+          cmp = a.subtitle.localeCompare(b.subtitle, "ja");
+          break;
+      }
+      return sortDirection === "asc" ? cmp : -cmp;
+    });
+    return sorted;
+  }, [results, sortField, sortDirection]);
+
+  const handleSortFieldChange = useCallback((field: SortField) => {
+    if (field === sortField) {
+      setSortDirection((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDirection("desc");
+    }
+  }, [sortField]);
+
+  // ── 結果を種類でグループ化（ソート済み） ──
   const sections = useMemo(() => {
-    const minuteItems = results.filter((r) => r.type === "minute");
-    const recordingItems = results.filter((r) => r.type === "recording");
-    const jobItems = results.filter((r) => r.type === "transcription_job");
+    const minuteItems = sortedResults.filter((r) => r.type === "minute");
+    const recordingItems = sortedResults.filter((r) => r.type === "recording");
+    const jobItems = sortedResults.filter((r) => r.type === "transcription_job");
 
     const out: { title: string; icon: React.ComponentProps<typeof Ionicons>["name"]; data: SearchResultItem[] }[] = [];
     if (minuteItems.length > 0) out.push({ title: "議事録", icon: "document-text", data: minuteItems });
     if (recordingItems.length > 0) out.push({ title: "録音", icon: "mic", data: recordingItems });
     if (jobItems.length > 0) out.push({ title: "文字起こし", icon: "hammer", data: jobItems });
     return out;
-  }, [results]);
+  }, [sortedResults]);
 
   // ── ローディング ──
   if (loading && !refreshing) {
@@ -168,12 +203,22 @@ export default function SearchScreen() {
         }
         contentContainerStyle={styles.list}
         ListHeaderComponent={
-          <SearchHeader
-            query={query}
-            onChangeText={handleQueryChange}
-            onClear={handleClear}
-            color={c}
-          />
+          <View>
+            <SearchHeader
+              query={query}
+              onChangeText={handleQueryChange}
+              onClear={handleClear}
+              color={c}
+            />
+            {hasSearched && results.length > 0 && (
+              <SortBar
+                sortField={sortField}
+                sortDirection={sortDirection}
+                onFieldChange={handleSortFieldChange}
+                color={c}
+              />
+            )}
+          </View>
         }
         ListEmptyComponent={
           !loading ? (
@@ -258,6 +303,66 @@ function SearchHeader({
   );
 }
 
+// ─── ソートバー ──────────────────────────────────────────
+
+function SortBar({
+  sortField,
+  sortDirection,
+  onFieldChange,
+  color: c,
+}: {
+  sortField: "date" | "name" | "status";
+  sortDirection: "asc" | "desc";
+  onFieldChange: (field: "date" | "name" | "status") => void;
+  color: ReturnType<typeof theme>;
+}) {
+  const fields: { key: "date" | "name" | "status"; label: string }[] = [
+    { key: "date", label: "日付" },
+    { key: "name", label: "名前" },
+    { key: "status", label: "ステータス" },
+  ];
+
+  return (
+    <View style={[styles.sortBar, { borderColor: c.border }]}>
+      <View style={styles.sortFields}>
+        {fields.map((f) => {
+          const active = sortField === f.key;
+          return (
+            <TouchableOpacity
+              key={f.key}
+              onPress={() => onFieldChange(f.key)}
+              style={[
+                styles.sortFieldButton,
+                active && { backgroundColor: c.primaryBg },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.sortFieldLabel,
+                  { color: active ? c.primary : c.textMuted },
+                ]}
+              >
+                {f.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+      <TouchableOpacity
+        onPress={() => onFieldChange(sortField)}
+        style={styles.sortDirectionButton}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      >
+        <Ionicons
+          name={sortDirection === "asc" ? "arrow-up" : "arrow-down"}
+          size={16}
+          color={c.textMuted}
+        />
+      </TouchableOpacity>
+    </View>
+  );
+}
+
 // ─── スタイル ─────────────────────────────────────────────
 
 const styles = StyleSheet.create({
@@ -283,6 +388,36 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     paddingVertical: 0,
+  },
+
+  // Sort bar
+  sortBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 24,
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  sortFields: {
+    flexDirection: "row",
+    gap: 6,
+  },
+  sortFieldButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  sortFieldLabel: {
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  sortDirectionButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   // Section
