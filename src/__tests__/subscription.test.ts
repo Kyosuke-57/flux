@@ -35,6 +35,19 @@ vi.mock("@react-native-async-storage/async-storage", () => ({
 
 vi.mock("react-native-url-polyfill/auto", () => ({}));
 
+vi.mock("react-native-purchases", () => ({
+  default: {
+    configure: vi.fn(),
+    getCustomerInfo: vi.fn().mockResolvedValue({
+      entitlements: { active: {} },
+    }),
+    getOfferings: vi.fn().mockResolvedValue({ current: null }),
+    ENTITLEMENT_VERIFICATION_MODE: { ENFORCED: "enforced" },
+    VERIFICATION_RESULT: { VERIFIED: "verified" },
+    PURCHASES_ERROR_CODE: { PURCHASE_CANCELLED_ERROR: "purchase_cancelled" },
+  },
+}));
+
 import { PLANS } from "../services/subscription";
 import { PLAN_LIMITS, type SubscriptionPlan } from "../types";
 

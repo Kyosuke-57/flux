@@ -1,6 +1,8 @@
 import { supabase, requireUser } from "../lib/supabase";
 import type { SubscriptionPlan } from "../types";
 import { PLAN_LIMITS } from "../types";
+import Purchases from "react-native-purchases";
+import { Platform } from "react-native";
 
 export interface PlanInfo {
   id: SubscriptionPlan;
@@ -174,17 +176,47 @@ export async function resetMonthlyUsage() {
 }
 
 /**
- * Placeholder: RevenueCat SDK integration for managing entitlements.
- * Replace with actual RevenueCat calls when the SDK is configured.
+ * Configure the RevenueCat SDK with the API key from environment variables.
+ * Call this once at app startup (e.g. in _layout.tsx).
+ *
+ * Requires EXPO_PUBLIC_REVENUECAT_API_KEY (Apple/App Store) and
+ * EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY (Google Play) to be set in .env.
+ */
+export function configureRevenueCat() {
+  const apiKey = Platform.select({
+    ios: process.env.EXPO_PUBLIC_REVENUECAT_API_KEY,
+    android: process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY,
+    default: process.env.EXPO_PUBLIC_REVENUECAT_API_KEY,
+  });
+
+  if (!apiKey) {
+    console.warn(
+      "RevenueCat API key not found. Set EXPO_PUBLIC_REVENUECAT_API_KEY (and EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY for Android) in .env"
+    );
+    return;
+  }
+
+  Purchases.configure({ apiKey });
+}
+
+/**
+ * Fetches the current user's active entitlements via the RevenueCat SDK.
+ *
+ * NOTE: `configureRevenueCat()` must be called before this function.
+ * Returns `{ entitlements: null }` if the SDK is not configured or the call fails.
  */
 export async function getRevenueCatEntitlements() {
-  // TODO: Integrate RevenueCat SDK
-  // Example:
-  //   import Purchases from 'react-native-purchases';
-  //   const offerings = await Purchases.getOfferings();
-  //   return offerings.current;
-  console.warn("RevenueCat SDK not yet configured — returning stub.");
-  return { entitlements: null };
+  try {
+    const customerInfo = await Purchases.getCustomerInfo();
+    const active = customerInfo.entitlements.active;
+    const entitlementIds = Object.keys(active);
+    return {
+      entitlements: entitlementIds.length > 0 ? active : null,
+    };
+  } catch (error) {
+    console.warn("RevenueCat SDK not available or not configured — returning stub.", error);
+    return { entitlements: null };
+  }
 }
 
 /**
