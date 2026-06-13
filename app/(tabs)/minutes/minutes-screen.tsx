@@ -1,5 +1,5 @@
-import React, { useCallback } from "react";
-import { FlatList, RefreshControl, StyleSheet, View } from "react-native";
+import React, { useCallback, useState } from "react";
+import { FlatList, RefreshControl, StyleSheet, View, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { useAuth } from "../../../src/contexts/AuthContext";
@@ -15,6 +15,9 @@ import { MinuteCard } from "./components/minute-card";
 import { EmptyState } from "./components/empty-state";
 import { LoadingSkeleton, UnauthenticatedView } from "./components/skeleton-state";
 import { CreateFolderModal } from "./components/create-folder-modal";
+import { ActionSheet } from "../../../src/components/ActionSheet";
+import { exportAndShareMinute, type ExportFormat } from "../../../src/services/export";
+import type { Minute } from "../../../src/types";
 
 export default function MinutesScreen() {
   const { settings } = useSettings();
@@ -84,6 +87,27 @@ export default function MinutesScreen() {
     setNewFolderName("");
     setFolderModalVisible(true);
   }, [setNewFolderName, setFolderModalVisible]);
+
+  // ── Export ──
+  const [exportMinute, setExportMinute] = useState<Minute | null>(null);
+
+  const handleExport = useCallback((minute: Minute) => {
+    setExportMinute(minute);
+  }, []);
+
+  const handleExportFormat = useCallback(
+    async (format: ExportFormat) => {
+      const minute = exportMinute;
+      setExportMinute(null);
+      if (!minute) return;
+      try {
+        await exportAndShareMinute(minute, format);
+      } catch (e: any) {
+        Alert.alert("エクスポートエラー", e?.message ?? "エクスポートに失敗しました。");
+      }
+    },
+    [exportMinute],
+  );
 
   // ── Loading ──
   if (loading) {
@@ -181,6 +205,7 @@ export default function MinutesScreen() {
                     }}
                     onLongPress={() => handleLongPress(item)}
                     onDelete={() => handleDelete(item.id)}
+                    onExport={() => handleExport(item)}
                     formatDate={(iso) => {
                       const d = new Date(iso);
                       return d.toLocaleDateString("ja-JP", {
@@ -217,6 +242,18 @@ export default function MinutesScreen() {
         onClose={() => setFolderModalVisible(false)}
         onCreate={handleCreateFolder}
         color={c}
+      />
+
+      {/* エクスポート形式選択 */}
+      <ActionSheet
+        visible={!!exportMinute}
+        title="エクスポート形式を選択"
+        options={[
+          { label: "テキスト (.txt)", onPress: () => handleExportFormat("txt") },
+          { label: "Markdown (.md)", onPress: () => handleExportFormat("md") },
+          { label: "PDF (.pdf)", onPress: () => handleExportFormat("pdf") },
+        ]}
+        onClose={() => setExportMinute(null)}
       />
     </SafeAreaView>
   );

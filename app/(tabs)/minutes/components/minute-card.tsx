@@ -17,6 +17,7 @@ type Props = {
   onPress: () => void;
   onLongPress: () => void;
   onDelete: () => void;
+  onExport: () => void;
   formatDate: (iso: string) => string;
   getTagName: (tagId: string) => string;
   getPreview: (content: string) => string;
@@ -47,6 +48,14 @@ export function MinuteCard({
     [item.id, toggle]
   );
 
+  const handleExport = useCallback(
+    (e: any) => {
+      e.stopPropagation?.();
+      onExport();
+    },
+    [onExport]
+  );
+
   return (
     <SwipeableRow onDelete={onDelete}>
       <TouchableOpacity
@@ -74,16 +83,28 @@ export function MinuteCard({
               style={{ ...styles.cardTitle, color: color.textPrimary }}
             />
             {!selectMode && (
-              <TouchableOpacity
-                onPress={handleToggleFavorite}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Ionicons
-                  name={favorited ? "heart" : "heart-outline"}
-                  size={18}
-                  color={favorited ? color.primary : color.textMuted}
-                />
-              </TouchableOpacity>
+              <>
+                <TouchableOpacity
+                  onPress={handleExport}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Ionicons
+                    name="share-outline"
+                    size={18}
+                    color={color.textMuted}
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleToggleFavorite}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Ionicons
+                    name={favorited ? "heart" : "heart-outline"}
+                    size={18}
+                    color={favorited ? color.primary : color.textMuted}
+                  />
+                </TouchableOpacity>
+              </>
             )}
             <Text style={[styles.cardDate, { color: color.textMuted }]}>
               {formatDate(item.created_at)}

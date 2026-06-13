@@ -30,6 +30,7 @@ import { useFavorites } from "../../src/contexts/FavoritesContext";
 import { Skeleton } from "../../src/components/Skeleton";
 import { ActionSheet, type ActionSheetOption } from "../../src/components/ActionSheet";
 import { INDUSTRY_TEMPLATES } from "../../src/data/industry-templates";
+import { exportAndShareMinute, type ExportFormat } from "../../src/services/export";
 
 export default function MinuteDetailScreen() {
   const { settings } = useSettings();
@@ -333,72 +334,48 @@ export default function MinuteDetailScreen() {
   const handleShare = useCallback(
     async (format: "txt" | "md" | "pdf" | "docx") => {
       setShareModalVisible(false);
-      const isAvailable = await Sharing.isAvailableAsync();
-      if (!isAvailable) {
-        Alert.alert("共有不可", "このデバイスでは共有が利用できません。");
-        return;
-      }
 
-      const shareContent = content;
-
-      let fileUri: string;
-      let mimeType: string;
-      let uti: string;
-
-      if (format === "pdf") {
-        const { printToFileAsync } = await import("expo-print");
-        const html = `
-          <html>
-          <head><meta charset="utf-8"><style>
-            body { font-family: sans-serif; padding: 24px; line-height: 1.7; color: #333; }
-            h1 { font-size: 24px; border-bottom: 2px solid #7C3AED; padding-bottom: 8px; }
-            p { margin: 8px 0; }
-          </style></head>
-          <body>
-            <h1>${title}</h1>
-            ${shareContent.split("\n").map((line) => {
-              if (line.startsWith("# ")) return `<h1>${line.slice(2)}</h1>`;
-              if (line.startsWith("## ")) return `<h2>${line.slice(3)}</h2>`;
-              if (line.startsWith("### ")) return `<h3>${line.slice(4)}</h3>`;
-              return `<p>${line}</p>`;
-            }).join("\n")}
-          </body>
-          </html>
-        `;
-        const { uri } = await printToFileAsync({ html });
-        fileUri = uri;
-        mimeType = "application/pdf";
-        uti = "com.adobe.pdf";
-      } else if (format === "docx") {
+      if (format === "docx") {
+        const isAvailable = await Sharing.isAvailableAsync();
+        if (!isAvailable) {
+          Alert.alert("共有不可", "このデバイスでは共有が利用できません。");
+          return;
+        }
         const html = `
           <html>
           <head><meta charset="utf-8"></head>
           <body>
             <h1>${title}</h1>
-            ${shareContent.split("\n").map((line) => `<p>${line}</p>`).join("\n")}
+            ${content.split("\n").map((line) => `<p>${line}</p>`).join("\n")}
           </body>
           </html>
         `;
         const file = new File(Paths.cache, `minute-${Date.now()}.docx`);
         file.write(html);
-        fileUri = file.uri;
-        mimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-        uti = "org.openxmlformats.wordprocessingml.document";
-      } else {
-        const ext = format;
-        const data = format === "md"
-          ? `# ${title}\n\n${shareContent}`
-          : `${title}\n\n${shareContent}`;
-        const file = new File(Paths.cache, `minute-${Date.now()}.${ext}`);
-        file.write(data);
-        fileUri = file.uri;
-        mimeType = format === "md" ? "text/markdown" : "text/plain";
-        uti = format === "md" ? "net.daringfireball.markdown" : "public.plain-text";
+        await Sharing.shareAsync(file.uri, {
+          mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          dialogTitle: "議事録を共有",
+        });
+        return;
       }
 
-      await Sharing.shareAsync(fileUri, { mimeType, dialogTitle: "議事録を共有", UTI: uti });
+      // txt / md / pdf は共有サービスに委譲
+      try {
+        const minute: Minute = {
+          id: id ?? "",
+          user_id: "",
+          title,
+          content,
+          tags: [],
+          created_at: "",
+          updated_at: "",
+        };
+        await exportAndShareMinute(minute, format as ExportFormat);
+      } catch (e: any) {
+        Alert.alert("エクスポートエラー", e?.message ?? "エクスポートに失敗しました。");
+      }
     },
-    [title, content]
+    [title, content, id]
   );
 
   const handleSharePress = useCallback(() => {
