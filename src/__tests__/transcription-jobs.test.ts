@@ -18,6 +18,7 @@ vi.mock("@supabase/supabase-js", () => ({
       update: vi.fn().mockReturnThis(),
       delete: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
+      or: vi.fn().mockReturnThis(),
       order: vi.fn().mockReturnThis(),
       single: vi.fn().mockResolvedValue(mockFromResult),
       then: (onFulfilled: any) =>
@@ -44,6 +45,7 @@ import {
   createTranscriptionJob,
   updateTranscriptionJob,
   deleteTranscriptionJob,
+  searchTranscriptionJobs,
 } from "../services/transcription-jobs";
 import type { TranscriptionJob } from "../types";
 
@@ -372,6 +374,57 @@ describe("transcription-jobs", () => {
 
       const result = await deleteTranscriptionJob("job-1");
 
+      expect(result.error).toBeInstanceOf(Error);
+      expect(result.error!.message).toBe("Not authenticated");
+    });
+  });
+
+  // ---------------------------------------------------------------
+  // searchTranscriptionJobs
+  // ---------------------------------------------------------------
+  describe("searchTranscriptionJobs", () => {
+    it("認証済み、検索クエリに一致するジョブを返す", async () => {
+      setupAuthenticated();
+      const matched = [
+        mockJobList[0],
+        mockJobList[1],
+      ];
+      mockFromResult.data = matched;
+
+      const result = await searchTranscriptionJobs("recording");
+
+      expect(result.data).toEqual(matched);
+      expect(result.data).toHaveLength(2);
+      expect(result.error).toBeNull();
+    });
+
+    it("認証済み、検索クエリに一致しない場合は空配列を返す", async () => {
+      setupAuthenticated();
+      mockFromResult.data = [];
+
+      const result = await searchTranscriptionJobs("nonexistent");
+
+      expect(result.data).toEqual([]);
+      expect(result.error).toBeNull();
+    });
+
+    it("Supabaseクエリがエラーを返した場合、エラーを伝搬する", async () => {
+      setupAuthenticated();
+      const dbError = new Error("Search failed");
+      mockFromResult.error = dbError;
+
+      const result = await searchTranscriptionJobs("recording");
+
+      expect(result.data).toBeNull();
+      expect(result.error).toBe(dbError);
+    });
+
+    it("未認証の場合、認証エラーを返す", async () => {
+      setupUnauthenticated();
+
+      const result = await searchTranscriptionJobs("recording");
+
+      expect(result.data).toBeNull();
       expect(result.error).toBeInstanceOf(Error);
       expect(result.error!.message).toBe("Not authenticated");
     });
