@@ -21,7 +21,7 @@ import { useAuth } from "../../src/contexts/AuthContext";
 import { useSettings } from "../../src/contexts/SettingsContext";
 import { useToast } from "../../src/contexts/ToastContext";
 import { signOut } from "../../src/services/auth";
-import { getSubscriptionStatus, PLANS, type PlanInfo } from "../../src/services/subscription";
+import { getSubscriptionStatus, purchasePlan, PLANS, type PlanInfo } from "../../src/services/subscription";
 import { getAllTemplates } from "../../src/services/templates";
 import { getAllFolders, createFolder, updateFolder, deleteFolder } from "../../src/services/folders";
 import { getAllTags, createTag, updateTag, deleteTag } from "../../src/services/tags";
@@ -350,8 +350,14 @@ export default function SettingsScreen() {
                         {
                           text: "変更する",
                           onPress: async () => {
-                            // TODO: RevenueCat purchase flow
-                            toast.showToast({ message: `${plan.name}プランに変更しました`, type: "success" });
+                            const { success, error } = await purchasePlan(plan.id);
+                            if (success) {
+                              const { data } = await getSubscriptionStatus();
+                              if (data) setSubscription(data);
+                              toast.showToast({ message: `${plan.name}プランに変更しました`, type: "success" });
+                            } else if (error) {
+                              toast.showToast({ message: error, type: "error" });
+                            }
                           },
                         },
                       ],

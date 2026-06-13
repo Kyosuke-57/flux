@@ -7,6 +7,7 @@ import { AuthProvider } from "../src/contexts/AuthContext";
 import { SettingsProvider, useSettings } from "../src/contexts/SettingsContext";
 import { ToastProvider } from "../src/contexts/ToastContext";
 import { setHapticsEnabled } from "../src/animations/haptics";
+import { configureRevenueCat, syncRevenueCatEntitlements } from "../src/services/subscription";
 
 /** Syncs settings to global module state (haptics flag, etc.) */
 function SettingsSync() {
@@ -35,6 +36,11 @@ function NavigationBackground() {
 }
 
 export default function RootLayout() {
+  useEffect(() => {
+    configureRevenueCat();
+    syncRevenueCatEntitlements();
+  }, []);
+
   return (
     <SafeAreaProvider>
       <SettingsProvider>

@@ -220,6 +220,80 @@ export async function getRevenueCatEntitlements() {
 }
 
 /**
+ * Maps plan IDs to RevenueCat entitlements & package identifiers.
+ * Must match identifiers configured in the RevenueCat dashboard.
+ */
+const ENTITLEMENT_MAP: Record<string, string> = {
+  pro: "pro",
+  byok: "byok",
+};
+
+const PACKAGE_IDENTIFIER_MAP: Record<string, string> = {
+  pro: "pro_monthly",
+  byok: "byok_monthly",
+};
+
+async function updatePlanTier(planId: SubscriptionPlan): Promise<{ success: boolean; error: string | null }> {
+  const { user, error: authError } = await requireUser();
+  if (authError || !user) return { success: false, error: "認証エラー" };
+
+  const { error } = await supabase.from("users").update({ subscription_tier: planId }).eq("id", user.id);
+  if (error) {
+    console.error("Failed to update plan tier:", error);
+    return { success: false, error: "プラン更新に失敗しました" };
+  }
+  return { success: true, error: null };
+}
+
+export async function purchasePlan(planId: SubscriptionPlan): Promise<{ success: boolean; error: string | null }> {
+  if (planId === "free") return await updatePlanTier(planId);
+
+  try {
+    const offerings = await Purchases.getOfferings();
+    const current = offerings.current;
+    if (!current) return { success: false, error: "RevenueCatのオファリングが利用できません" };
+
+    const pkgId = PACKAGE_IDENTIFIER_MAP[planId];
+    const pkg = current.availablePackages.find((p) => p.identifier === pkgId);
+    if (!pkg) return { success: false, error: `プラン「${planId}」のパッケージが見つかりません` };
+
+    const { customerInfo } = await Purchases.purchasePackage(pkg);
+    const entitlement = customerInfo.entitlements.active[ENTITLEMENT_MAP[planId]];
+    if (!entitlement) return { success: false, error: "購入は完了しましたが、エンタイトルメントが有効になっていません" };
+
+    return await updatePlanTier(planId);
+  } catch (error: any) {
+    if (error?.code === "PURCHASE_CANCELLED_ERROR") return { success: false, error: null };
+    console.error("RevenueCat purchase failed:", error);
+    return { success: false, error: "購入に失敗しました" };
+  }
+}
+
+export async function syncRevenueCatEntitlements(): Promise<void> {
+  try {
+    const { entitlements } = await getRevenueCatEntitlements();
+    if (!entitlements) return;
+
+    const activeId = Object.keys(entitlements).find((id) => Object.values(ENTITLEMENT_MAP).includes(id));
+    if (!activeId) return;
+
+    const entry = Object.entries(ENTITLEMENT_MAP).find(([, v]) => v === activeId);
+    if (!entry) return;
+    const planId = entry[0] as SubscriptionPlan;
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data: current } = await supabase.from("users").select("subscription_tier").eq("id", user.id).single();
+    if (current && current.subscription_tier !== planId) {
+      await supabase.from("users").update({ subscription_tier: planId }).eq("id", user.id);
+    }
+  } catch (error) {
+    console.warn("Failed to sync RevenueCat entitlements:", error);
+  }
+}
+
+/**
  * Placeholder: Creates a Stripe checkout session for upgrading/downgrading plans.
  * Replace with actual Stripe server call when the backend endpoint is ready.
  */
