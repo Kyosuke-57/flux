@@ -105,6 +105,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="pipeline-manager"
+        options={{
+          title: "パイプライン",
+          tabBarIcon: ({ focused }) => <TabIcon icon="git-network" focused={focused} c={c} />,
+        }}
+      />
+      <Tabs.Screen
         name="auth"
         options={{
           title: "認証",

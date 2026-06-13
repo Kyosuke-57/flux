@@ -70,6 +70,23 @@ export interface AuthData {
   updated_at: string;
 }
 
+export interface TranscriptionJob {
+  id: string;
+  user_id: string;
+  recording_id: string;
+  r2_key: string;
+  file_name: string;
+  file_size: number;
+  status: "queued" | "processing" | "completed" | "failed";
+  total_chunks: number;
+  completed_chunks: number;
+  transcript?: string;
+  error_message?: string;
+  groq_retry_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export type SubscriptionPlan = "free" | "pro" | "byok";
 
 export const PLAN_LIMITS: Record<SubscriptionPlan, number> = {
