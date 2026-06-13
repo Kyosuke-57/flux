@@ -105,6 +105,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="tags"
+        options={{
+          title: "タグ",
+          tabBarIcon: ({ focused }) => <TabIcon icon="pricetag" focused={focused} c={c} />,
+        }}
+      />
+      <Tabs.Screen
         name="subscription"
         options={{
           title: "サブスク",
