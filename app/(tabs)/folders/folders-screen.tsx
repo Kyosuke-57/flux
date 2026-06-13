@@ -10,6 +10,7 @@ import { FolderCard } from "./components/folder-card";
 import { FolderFormModal } from "./components/form-modal";
 import { EmptyState } from "./components/empty-state";
 import { LoadingSkeleton } from "./components/skeleton-state";
+import { SortControls } from "./components/sort-controls";
 
 export default function FoldersScreen() {
   const { settings } = useSettings();
@@ -23,7 +24,11 @@ export default function FoldersScreen() {
     refreshing,
     formModalVisible,
     editingFolder,
+    sortBy,
+    sortOrder,
     setSearch,
+    setSortBy,
+    setSortOrder,
     onRefresh,
     handleOpenCreate,
     handleOpenEdit,
@@ -72,6 +77,15 @@ export default function FoldersScreen() {
           <Ionicons name="add" size={22} color={c.textInverse} />
         </TouchableOpacity>
       </View>
+
+      {/* ソートコントロール */}
+      <SortControls
+        sortBy={sortBy}
+        sortOrder={sortOrder}
+        onChangeSortBy={setSortBy}
+        onToggleOrder={() => setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"))}
+        color={c}
+      />
 
       {/* 一覧 */}
       {filteredFolders.length === 0 && !search ? (

@@ -1,9 +1,14 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { Alert } from "react-native";
 import { useAuth } from "../../../../src/contexts/AuthContext";
 import { useToast } from "../../../../src/contexts/ToastContext";
 import { getAllFolders, createFolder, updateFolder, deleteFolder } from "../../../../src/services/folders";
 import type { Folder } from "../../../../src/types";
+
+// ─── ソート型 ──────────────────────────────────────────────
+
+export type SortBy = "date" | "name" | "status";
+export type SortOrder = "asc" | "desc";
 
 // ─── カスタムフック ─────────────────────────────────────────
 
@@ -18,6 +23,10 @@ export function useFoldersData() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  // ── ソート状態 ──
+  const [sortBy, setSortBy] = useState<SortBy>("date");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
 
   // ── モーダル状態 ──
   const [formModalVisible, setFormModalVisible] = useState(false);
@@ -49,10 +58,29 @@ export function useFoldersData() {
     fetchData();
   }, [fetchData]);
 
-  // ── 検索フィルタリング ──
-  const filteredFolders = search.trim()
-    ? folders.filter((f) => f.name.toLowerCase().includes(search.toLowerCase()))
-    : folders;
+  // ── 検索フィルタリング & ソート ──
+  const filteredFolders = useMemo(() => {
+    const filtered = search.trim()
+      ? folders.filter((f) => f.name.toLowerCase().includes(search.toLowerCase()))
+      : folders;
+
+    return [...filtered].sort((a, b) => {
+      let cmp = 0;
+      switch (sortBy) {
+        case "date":
+          cmp = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+          break;
+        case "name":
+          cmp = a.name.localeCompare(b.name, "ja");
+          break;
+        case "status":
+          // フォルダに status フィールドはないため updated_at で代用
+          cmp = new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime();
+          break;
+      }
+      return sortOrder === "desc" ? -cmp : cmp;
+    });
+  }, [folders, search, sortBy, sortOrder]);
 
   // ── モーダルを開く（作成） ──
   const handleOpenCreate = useCallback(() => {
@@ -151,8 +179,14 @@ export function useFoldersData() {
     formModalVisible,
     editingFolder,
 
+    // ソート状態
+    sortBy,
+    sortOrder,
+
     // セッター
     setSearch,
+    setSortBy,
+    setSortOrder,
 
     // アクション
     fetchData,
