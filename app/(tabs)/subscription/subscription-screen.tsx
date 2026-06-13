@@ -14,7 +14,14 @@ import { useSettings } from "../../../src/contexts/SettingsContext";
 import { theme } from "../../../src/theme";
 import { useSubscriptionData } from "./hooks/use-subscription-data";
 import { PLANS } from "../../../src/services/subscription";
-import { secondsToHms, filterPlans } from "./hooks/utils";
+import {
+  secondsToHms,
+  filterPlans,
+  sortPlans,
+  SORT_LABELS,
+  type SortField,
+  type SortOrder,
+} from "./hooks/utils";
 import { SubscriptionPlanCard } from "./components/subscription-plan-card";
 import { EmptyState } from "./components/empty-state";
 import { LoadingSkeleton } from "./components/skeleton-state";
@@ -53,9 +60,16 @@ export default function SubscriptionScreen() {
   const currentPlanId = currentPlan?.plan ?? null;
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [sortField, setSortField] = useState<SortField>("name");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
+
+  const sortedPlans = useMemo(
+    () => sortPlans(PLANS, sortField, sortOrder),
+    [sortField, sortOrder],
+  );
   const filteredPlans = useMemo(
-    () => filterPlans(PLANS, searchQuery),
-    [searchQuery],
+    () => filterPlans(sortedPlans, searchQuery),
+    [sortedPlans, searchQuery],
   );
 
   return (
@@ -101,6 +115,58 @@ export default function SubscriptionScreen() {
             onPress={() => setSearchQuery("")}
           />
         )}
+      </View>
+
+      {/* ソートコントロール */}
+      <View style={styles.sortContainer}>
+        <View style={styles.sortChips}>
+          {(Object.keys(SORT_LABELS) as SortField[]).map((field) => (
+            <TouchableOpacity
+              key={field}
+              style={[
+                styles.sortChip,
+                {
+                  backgroundColor:
+                    sortField === field ? c.primary : c.surface,
+                  borderColor:
+                    sortField === field ? c.primary : c.border,
+                },
+              ]}
+              onPress={() => setSortField(field)}
+              accessibilityLabel={`${SORT_LABELS[field]}でソート`}
+            >
+              <Text
+                style={[
+                  styles.sortChipText,
+                  {
+                    color:
+                      sortField === field ? c.textInverse : c.textSecondary,
+                  },
+                ]}
+              >
+                {SORT_LABELS[field]}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <TouchableOpacity
+          style={[
+            styles.orderToggle,
+            { backgroundColor: c.surface, borderColor: c.border },
+          ]}
+          onPress={() =>
+            setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"))
+          }
+          accessibilityLabel={
+            sortOrder === "asc" ? "昇順" : "降順"
+          }
+        >
+          <Ionicons
+            name={sortOrder === "asc" ? "arrow-up" : "arrow-down"}
+            size={16}
+            color={c.textPrimary}
+          />
+        </TouchableOpacity>
       </View>
 
       {/* コンテンツ */}
@@ -200,6 +266,36 @@ export default function SubscriptionScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  sortContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 24,
+    paddingBottom: 8,
+    gap: 8,
+  },
+  sortChips: {
+    flexDirection: "row",
+    gap: 6,
+    flex: 1,
+  },
+  sortChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  sortChipText: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  orderToggle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",

@@ -2,6 +2,49 @@
 
 import type { PlanInfo } from "../../../../src/services/subscription";
 
+// ─── ソート関連の型 ──────────────────────────────────────────
+
+/** ソート可能なフィールド */
+export type SortField = "name" | "monthlyMinutes" | "status";
+
+/** ソート順 */
+export type SortOrder = "asc" | "desc";
+
+// ─── ソート用ラベル（UI表示用） ──────────────────────────────
+
+export const SORT_LABELS: Record<SortField, string> = {
+  name: "名前",
+  monthlyMinutes: "利用時間",
+  status: "ステータス",
+};
+
+// ─── ソート関数 ──────────────────────────────────────────────
+
+/** プラン一覧を指定されたフィールドと順序でソートする */
+export function sortPlans(
+  plans: PlanInfo[],
+  field: SortField,
+  order: SortOrder,
+): PlanInfo[] {
+  const tierOrder: Record<string, number> = { free: 0, pro: 1, byok: 2 };
+
+  return [...plans].sort((a, b) => {
+    let cmp = 0;
+    switch (field) {
+      case "name":
+        cmp = a.name.localeCompare(b.name);
+        break;
+      case "monthlyMinutes":
+        cmp = a.monthlyMinutes - b.monthlyMinutes;
+        break;
+      case "status":
+        cmp = (tierOrder[a.id] ?? 99) - (tierOrder[b.id] ?? 99);
+        break;
+    }
+    return order === "asc" ? cmp : -cmp;
+  });
+}
+
 /**
  * プラン一覧を検索クエリでフィルタリングする。
  * name / price / features のいずれかに部分一致するプランを返す。

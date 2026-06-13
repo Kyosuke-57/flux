@@ -10,6 +10,7 @@ import {
   getPlanColor,
   getPlanIcon,
   filterPlans,
+  sortPlans,
 } from "../hooks/utils";
 import type { PlanInfo } from "../../../../src/services/subscription";
 
@@ -174,5 +175,44 @@ describe("filterPlans", () => {
   it("該当なしの場合は空配列を返す", () => {
     const result = filterPlans(mockPlans, "zzzzzzz");
     expect(result).toHaveLength(0);
+  });
+});
+
+// ─── sortPlans ──────────────────────────────────────────────
+
+describe("sortPlans", () => {
+  it("名前の昇順でソートする", () => {
+    const result = sortPlans(mockPlans, "name", "asc");
+    expect(result.map((p) => p.id)).toEqual(["free", "byok", "pro"]);
+  });
+
+  it("名前の降順でソートする", () => {
+    const result = sortPlans(mockPlans, "name", "desc");
+    expect(result.map((p) => p.id)).toEqual(["pro", "byok", "free"]);
+  });
+
+  it("月間利用時間の昇順でソートする", () => {
+    const result = sortPlans(mockPlans, "monthlyMinutes", "asc");
+    expect(result.map((p) => p.id)).toEqual(["free", "pro", "byok"]);
+  });
+
+  it("月間利用時間の降順でソートする", () => {
+    const result = sortPlans(mockPlans, "monthlyMinutes", "desc");
+    expect(result.map((p) => p.id)).toEqual(["byok", "pro", "free"]);
+  });
+
+  it("ステータス（free < pro < byok）の昇順でソートする", () => {
+    const result = sortPlans(mockPlans, "status", "asc");
+    expect(result.map((p) => p.id)).toEqual(["free", "pro", "byok"]);
+  });
+
+  it("ステータスの降順でソートする", () => {
+    const result = sortPlans(mockPlans, "status", "desc");
+    expect(result.map((p) => p.id)).toEqual(["byok", "pro", "free"]);
+  });
+
+  it("ソートは元の配列を変更しない", () => {
+    sortPlans(mockPlans, "name", "desc");
+    expect(mockPlans.map((p) => p.id)).toEqual(["free", "pro", "byok"]);
   });
 });
