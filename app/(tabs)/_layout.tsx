@@ -196,6 +196,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="exports"
+        options={{
+          title: "エクスポート履歴",
+          tabBarIcon: ({ focused }) => <TabIcon icon="download" focused={focused} c={c} />,
+        }}
+      />
+      <Tabs.Screen
         name="settings"
         options={{
           title: "設定",
