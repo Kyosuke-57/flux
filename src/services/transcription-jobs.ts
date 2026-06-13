@@ -120,6 +120,25 @@ export async function updateTranscriptionJob(
 }
 
 /**
+ * 文字起こしジョブをファイル名で検索（ILIKE）
+ */
+export async function searchTranscriptionJobs(
+  query: string,
+): Promise<{ data: TranscriptionJob[] | null; error: any }> {
+  const { user, error: authError } = await requireUser();
+  if (authError || !user) return { data: null, error: authError };
+
+  const { data, error } = await supabase
+    .from("transcription_jobs")
+    .select("*")
+    .eq("user_id", user.id)
+    .or(`file_name.ilike.%${query}%,transcript.ilike.%${query}%`)
+    .order("created_at", { ascending: false });
+
+  return { data: data as TranscriptionJob[] | null, error };
+}
+
+/**
  * 文字起こしジョブを削除
  */
 export async function deleteTranscriptionJob(id: string) {

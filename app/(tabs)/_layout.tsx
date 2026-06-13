@@ -98,6 +98,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="search"
+        options={{
+          title: "検索",
+          tabBarIcon: ({ focused }) => <TabIcon icon="search" focused={focused} c={c} />,
+        }}
+      />
+      <Tabs.Screen
         name="favorites"
         options={{
           title: "お気に入り",
