@@ -49,3 +49,4 @@ apps/otoroku-api/.next/
 .hermes/
 .omo/
 .playwright-mcp/
+.devloop/
