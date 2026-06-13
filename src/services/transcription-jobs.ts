@@ -58,6 +58,68 @@ export async function retryTranscriptionJob(id: string) {
 }
 
 /**
+ * 文字起こしジョブを作成
+ */
+export async function createTranscriptionJob(
+  input: Pick<
+    TranscriptionJob,
+    "recording_id" | "r2_key" | "file_name" | "file_size" | "status"
+  >,
+) {
+  const { user, error: authError } = await requireUser();
+  if (authError || !user) return { data: null, error: authError };
+
+  const { data, error } = await supabase
+    .from("transcription_jobs")
+    .insert({
+      user_id: user.id,
+      recording_id: input.recording_id,
+      r2_key: input.r2_key,
+      file_name: input.file_name,
+      file_size: input.file_size,
+      status: input.status,
+      total_chunks: 0,
+      completed_chunks: 0,
+      groq_retry_count: 0,
+    })
+    .select()
+    .single();
+
+  return { data: data as TranscriptionJob | null, error };
+}
+
+/**
+ * 文字起こしジョブを更新
+ */
+export async function updateTranscriptionJob(
+  id: string,
+  updates: Partial<
+    Pick<
+      TranscriptionJob,
+      | "file_name"
+      | "file_size"
+      | "r2_key"
+      | "status"
+      | "recording_id"
+      | "error_message"
+    >
+  >,
+) {
+  const { user, error: authError } = await requireUser();
+  if (authError || !user) return { data: null, error: authError };
+
+  const { data, error } = await supabase
+    .from("transcription_jobs")
+    .update(updates)
+    .eq("id", id)
+    .eq("user_id", user.id)
+    .select()
+    .single();
+
+  return { data: data as TranscriptionJob | null, error };
+}
+
+/**
  * 文字起こしジョブを削除
  */
 export async function deleteTranscriptionJob(id: string) {
