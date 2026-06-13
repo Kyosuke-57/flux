@@ -77,14 +77,14 @@ function stubXHR(behavior?: Partial<XHRBehavior>): Record<string, any> {
     onerror: null,
     ontimeout: null,
     send: vi.fn().mockImplementation(function () {
-      // Copy behavior-dependent properties onto this instance
-      this.status = b.status;
-      this.responseText = b.responseText;
+      // Copy behavior-dependent properties onto xhr
+      xhr.status = b.status;
+      xhr.responseText = b.responseText;
 
       // Fire progress callbacks before the final trigger
-      if (b.progressValues && this.upload.onprogress) {
+      if (b.progressValues && xhr.upload.onprogress) {
         for (const pct of b.progressValues) {
-          this.upload.onprogress({
+          xhr.upload.onprogress({
             lengthComputable: true,
             loaded: pct,
             total: 100,
@@ -94,8 +94,8 @@ function stubXHR(behavior?: Partial<XHRBehavior>): Record<string, any> {
 
       // Fire the final trigger asynchronously
       queueMicrotask(() => {
-        const handler = this[`on${b.trigger}`] as Function | null;
-        if (handler) handler.call(this);
+        const handler = xhr[`on${b.trigger}`] as Function | null;
+        if (handler) handler.call(xhr);
       });
     }),
   };
