@@ -3,6 +3,11 @@
  * React / React Native に依存しないためテストしやすい
  */
 
+import type { TranscriptionJob } from "../../../../src/types";
+
+export type SortField = "date" | "name" | "status";
+export type SortDirection = "asc" | "desc";
+
 export function formatDate(iso: string): string {
   const d = new Date(iso);
   return d.toLocaleDateString("ja-JP", {
@@ -29,6 +34,34 @@ export function statusLabel(status: string): string {
     failed: "失敗",
   };
   return map[status] ?? status;
+}
+
+/**
+ * ソート関数: SortField / SortDirection に基づいて配列をソートする
+ */
+export function sortJobs(
+  jobs: TranscriptionJob[],
+  field: SortField,
+  direction: SortDirection,
+): TranscriptionJob[] {
+  const sorted = [...jobs].sort((a, b) => {
+    let cmp: number;
+    switch (field) {
+      case "date":
+        cmp = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        break;
+      case "name":
+        cmp = a.file_name.localeCompare(b.file_name, "ja");
+        break;
+      case "status": {
+        const order = ["queued", "processing", "completed", "failed"];
+        cmp = order.indexOf(a.status) - order.indexOf(b.status);
+        break;
+      }
+    }
+    return direction === "asc" ? cmp : -cmp;
+  });
+  return sorted;
 }
 
 export function statusColor(status: string): string {

@@ -11,10 +11,12 @@ import {
 } from "../../../../src/services/transcription-jobs";
 import { getAllRecordings } from "../../../../src/services/recordings";
 import type { TranscriptionJob, Recording } from "../../../../src/types";
+import { sortJobs, type SortField, type SortDirection } from "./utils";
 
 // ─── 型定義 ────────────────────────────────────────────────
 
 export type StatusFilter = "all" | "queued" | "processing" | "completed" | "failed";
+export type { SortField, SortDirection };
 
 // ─── カスタムフック ─────────────────────────────────────────
 
@@ -28,6 +30,8 @@ export function useTranscriptionJobsData() {
 
   // ── UI状態 ──
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [sortBy, setSortBy] = useState<SortField>("date");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -176,18 +180,21 @@ export function useTranscriptionJobsData() {
     setEditModalVisible(true);
   }, []);
 
-  // ── フィルタリング ──
-  const filteredJobs =
-    statusFilter === "all"
-      ? jobs
-      : jobs.filter((j) => j.status === statusFilter);
+  // ── フィルタリング＋ソート ──
+  const processedJobs = sortJobs(
+    statusFilter === "all" ? jobs : jobs.filter((j) => j.status === statusFilter),
+    sortBy,
+    sortDirection,
+  );
 
   // ── 戻り値 ──
   return {
     // データ
-    jobs: filteredJobs,
+    jobs: processedJobs,
     recordings,
     statusFilter,
+    sortBy,
+    sortDirection,
     loading,
     refreshing,
 
@@ -198,6 +205,8 @@ export function useTranscriptionJobsData() {
 
     // セッター
     setStatusFilter,
+    setSortBy,
+    setSortDirection,
     setCreateModalVisible,
     setEditModalVisible,
     setEditingJob,

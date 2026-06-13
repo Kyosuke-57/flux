@@ -5,7 +5,8 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { formatDate, formatFileSize, statusLabel, statusColor } from "../hooks/utils";
+import { formatDate, formatFileSize, statusLabel, statusColor, sortJobs } from "../hooks/utils";
+import type { TranscriptionJob } from "../../../../src/types";
 
 // ─── フレームワーク動作確認 ───────────────────────────────
 
@@ -78,6 +79,70 @@ describe("statusLabel", () => {
 
   it("不明なステータスはそのまま返す", () => {
     expect(statusLabel("unknown")).toBe("unknown");
+  });
+});
+
+// ─── sortJobs ─────────────────────────────────────────────
+
+function makeJob(overrides: Partial<TranscriptionJob>): TranscriptionJob {
+  return {
+    id: "test-id",
+    user_id: "user-1",
+    recording_id: "rec-1",
+    r2_key: "key",
+    file_name: "test.mp3",
+    file_size: 1000,
+    status: "completed",
+    total_chunks: 1,
+    completed_chunks: 1,
+    groq_retry_count: 0,
+    created_at: "2026-06-01T00:00:00Z",
+    updated_at: "2026-06-01T00:00:00Z",
+    ...overrides,
+  };
+}
+
+describe("sortJobs", () => {
+  const a = makeJob({ id: "1", file_name: "Aファイル.mp3", created_at: "2026-06-01T00:00:00Z", status: "queued" });
+  const b = makeJob({ id: "2", file_name: "Bファイル.mp3", created_at: "2026-06-10T00:00:00Z", status: "processing" });
+  const c = makeJob({ id: "3", file_name: "Cファイル.mp3", created_at: "2026-06-20T00:00:00Z", status: "completed" });
+  const d = makeJob({ id: "4", file_name: "Dファイル.mp3", created_at: "2026-06-15T00:00:00Z", status: "failed" });
+
+  it("日付昇順でソートする", () => {
+    const result = sortJobs([c, a, d, b], "date", "asc");
+    expect(result.map((j) => j.id)).toEqual(["1", "2", "4", "3"]);
+  });
+
+  it("日付降順でソートする", () => {
+    const result = sortJobs([a, b, c, d], "date", "desc");
+    expect(result.map((j) => j.id)).toEqual(["3", "4", "2", "1"]);
+  });
+
+  it("名前昇順でソートする", () => {
+    const result = sortJobs([c, a, d, b], "name", "asc");
+    expect(result.map((j) => j.id)).toEqual(["1", "2", "3", "4"]);
+  });
+
+  it("名前降順でソートする", () => {
+    const result = sortJobs([a, b, c, d], "name", "desc");
+    expect(result.map((j) => j.id)).toEqual(["4", "3", "2", "1"]);
+  });
+
+  it("ステータス昇順でソートする (queued→processing→completed→failed)", () => {
+    const result = sortJobs([c, a, d, b], "status", "asc");
+    expect(result.map((j) => j.id)).toEqual(["1", "2", "3", "4"]);
+  });
+
+  it("ステータス降順でソートする (failed→completed→processing→queued)", () => {
+    const result = sortJobs([a, b, c, d], "status", "desc");
+    expect(result.map((j) => j.id)).toEqual(["4", "3", "2", "1"]);
+  });
+
+  it("元の配列を変更しない（イミュータブル）", () => {
+    const original = [c, a, d, b];
+    const originalIds = original.map((j) => j.id);
+    sortJobs(original, "date", "asc");
+    expect(original.map((j) => j.id)).toEqual(originalIds);
   });
 });
 

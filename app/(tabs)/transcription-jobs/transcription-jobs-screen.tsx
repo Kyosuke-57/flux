@@ -5,7 +5,12 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../../../src/contexts/AuthContext";
 import { useSettings } from "../../../src/contexts/SettingsContext";
 import { theme } from "../../../src/theme";
-import { useTranscriptionJobsData, type StatusFilter } from "./hooks/use-transcription-jobs-data";
+import {
+  useTranscriptionJobsData,
+  type StatusFilter,
+  type SortField,
+  type SortDirection,
+} from "./hooks/use-transcription-jobs-data";
 import { TranscriptionJobCard } from "./components/transcription-job-card";
 import { EmptyState } from "./components/empty-state";
 import { LoadingSkeleton, UnauthenticatedView } from "./components/skeleton-state";
@@ -20,6 +25,12 @@ const FILTER_OPTIONS: { key: StatusFilter; label: string }[] = [
   { key: "failed", label: "失敗" },
 ];
 
+const SORT_OPTIONS: { key: SortField; label: string }[] = [
+  { key: "date", label: "日付" },
+  { key: "name", label: "名前" },
+  { key: "status", label: "ステータス" },
+];
+
 export default function TranscriptionJobsScreen() {
   const { settings } = useSettings();
   const c = theme(settings.isDarkMode);
@@ -29,12 +40,16 @@ export default function TranscriptionJobsScreen() {
     jobs,
     recordings,
     statusFilter,
+    sortBy,
+    sortDirection,
     loading,
     refreshing,
     createModalVisible,
     editModalVisible,
     editingJob,
     setStatusFilter,
+    setSortBy,
+    setSortDirection,
     setCreateModalVisible,
     setEditModalVisible,
     handleCreate,
@@ -44,6 +59,15 @@ export default function TranscriptionJobsScreen() {
     openEditModal,
     onRefresh,
   } = useTranscriptionJobsData();
+
+  const handleSortPress = (field: SortField) => {
+    if (sortBy === field) {
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(field);
+      setSortDirection("desc");
+    }
+  };
 
   // ── Loading ──
   if (loading) {
@@ -96,6 +120,42 @@ export default function TranscriptionJobsScreen() {
             </Text>
           </TouchableOpacity>
         ))}
+      </View>
+
+      {/* ソートバー */}
+      <View style={[styles.sortRow, { borderBottomColor: c.divider }]}>
+        <Text style={[styles.sortLabel, { color: c.textMuted }]}>並び替え:</Text>
+        {SORT_OPTIONS.map((opt) => {
+          const isActive = sortBy === opt.key;
+          return (
+            <TouchableOpacity
+              key={opt.key}
+              style={[
+                styles.sortChip,
+                { backgroundColor: c.surfaceSecondary },
+                isActive && { backgroundColor: c.primary + "20" },
+              ]}
+              onPress={() => handleSortPress(opt.key)}
+            >
+              {isActive && (
+                <Ionicons
+                  name={sortDirection === "asc" ? "arrow-up" : "arrow-down"}
+                  size={12}
+                  color={c.primary}
+                />
+              )}
+              <Text
+                style={[
+                  styles.sortChipText,
+                  { color: c.textSecondary },
+                  isActive && { color: c.primary, fontWeight: "600" },
+                ]}
+              >
+                {opt.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
       {/* 一覧 / 空状態 */}
@@ -186,5 +246,23 @@ const styles = StyleSheet.create({
     borderRadius: 14,
   },
   filterChipText: { fontSize: 12, fontWeight: "500" },
+  sortRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 24,
+    paddingVertical: 8,
+    gap: 6,
+    borderBottomWidth: 1,
+  },
+  sortLabel: { fontSize: 11, marginRight: 2 },
+  sortChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  sortChipText: { fontSize: 11, fontWeight: "500" },
   list: { paddingBottom: 24 },
 });
