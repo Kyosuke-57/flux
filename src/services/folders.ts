@@ -61,18 +61,24 @@ export async function updateFolder(
   id: string,
   updates: Partial<Pick<Folder, "name" | "color">>,
 ) {
-  const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError };
+  try {
+    const { user, error: authError } = await requireUser();
+    if (authError || !user) return { data: null, error: authError };
 
-  const { data, error } = await supabase
-    .from("folders")
-    .update(updates)
-    .eq("id", id)
-    .eq("user_id", user.id)
-    .select()
-    .single();
+    const { data, error } = await supabase
+      .from("folders")
+      .update(updates)
+      .eq("id", id)
+      .eq("user_id", user.id)
+      .select()
+      .single();
 
-  return { data: data as Folder | null, error };
+    return { data: data as Folder | null, error };
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "フォルダの更新中に予期しないエラーが発生しました";
+    return { data: null, error: new Error(message) };
+  }
 }
 
 /**
