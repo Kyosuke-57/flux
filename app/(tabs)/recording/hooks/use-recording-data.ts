@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Alert } from "react-native";
 import { useAuth } from "../../../../src/contexts/AuthContext";
 import { useToast } from "../../../../src/contexts/ToastContext";
@@ -9,6 +9,7 @@ import {
   deleteRecording,
 } from "../../../../src/services/recordings";
 import type { Recording } from "../../../../src/types";
+import { filterRecordings } from "./utils";
 
 export type RecordingFormData = {
   title: string;
@@ -31,6 +32,12 @@ export function useRecordingData() {
   const [items, setItems] = useState<Recording[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const filteredItems = useMemo(
+    () => filterRecordings(items, searchQuery),
+    [items, searchQuery],
+  );
 
   // フォームモーダル状態
   const [formModalVisible, setFormModalVisible] = useState(false);
@@ -175,8 +182,13 @@ export function useRecordingData() {
   return {
     // データ
     items,
+    filteredItems,
     loading,
     refreshing,
+
+    // 検索
+    searchQuery,
+    setSearchQuery,
 
     // フォーム
     formModalVisible,

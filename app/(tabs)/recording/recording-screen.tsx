@@ -16,6 +16,7 @@ import { useRecordingData } from "./hooks/use-recording-data";
 import { RecordingCard } from "./components/recording-card";
 import { RecordingFormModal } from "./components/recording-form-modal";
 import { EmptyState } from "./components/empty-state";
+import { SearchBar } from "./components/search-bar";
 import { LoadingSkeleton, UnauthenticatedView } from "./components/skeleton-state";
 
 export default function RecordingScreen() {
@@ -25,8 +26,11 @@ export default function RecordingScreen() {
 
   const {
     items,
+    filteredItems,
     loading,
     refreshing,
+    searchQuery,
+    setSearchQuery,
     formModalVisible,
     editingItem,
     formData,
@@ -60,7 +64,7 @@ export default function RecordingScreen() {
         <EmptyState color={c} onCreate={openCreateForm} />
       ) : (
         <FlatList
-          data={items}
+          data={filteredItems}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
           refreshControl={
@@ -72,12 +76,20 @@ export default function RecordingScreen() {
             />
           }
           ListHeaderComponent={
-            <View style={styles.headerRow}>
-              <RecordingHeader
-                count={items.length}
-                onCreate={openCreateForm}
+            <View>
+              <SearchBar
+                value={searchQuery}
+                onChangeText={setSearchQuery}
                 color={c}
               />
+              <View style={styles.headerRow}>
+                <RecordingHeader
+                  count={filteredItems.length}
+                  total={items.length}
+                  onCreate={openCreateForm}
+                  color={c}
+                />
+              </View>
             </View>
           }
           renderItem={({ item }) => (
@@ -108,17 +120,23 @@ export default function RecordingScreen() {
 /** ヘッダー行: 件数表示 + 新規作成ボタン */
 function RecordingHeader({
   count,
+  total,
   onCreate,
   color,
 }: {
   count: number;
+  total?: number;
   onCreate: () => void;
   color: ReturnType<typeof theme>;
 }) {
+  const label =
+    total !== undefined && count !== total
+      ? `${count} 件（全 ${total} 件中）`
+      : `全 ${count} 件`;
   return (
     <View style={headerStyles.row}>
       <Text style={[headerStyles.count, { color: color.textSecondary }]}>
-        全 {count} 件
+        {label}
       </Text>
       <TouchableOpacity
         style={[headerStyles.addBtn, { backgroundColor: color.primary }]}

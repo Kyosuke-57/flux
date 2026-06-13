@@ -5,7 +5,13 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { formatDate, formatDuration, formatFileSize } from "../hooks/utils";
+import {
+  formatDate,
+  formatDuration,
+  formatFileSize,
+  filterRecordings,
+} from "../hooks/utils";
+import type { Recording } from "../../../src/types";
 
 // ─── フレームワーク動作確認 ───────────────────────────────
 
@@ -70,5 +76,71 @@ describe("formatFileSize", () => {
 
   it("1MB以上はMB表記", () => {
     expect(formatFileSize(2 * 1024 * 1024)).toBe("2.0MB");
+  });
+});
+
+// ─── filterRecordings ────────────────────────────────────────
+
+const sampleRecordings: Recording[] = [
+  {
+    id: "1",
+    user_id: "u1",
+    title: "定例MTG 2026年6月",
+    file_path: "recordings/june-meeting.m4a",
+    duration_seconds: 1800,
+    created_at: "2026-06-12T10:00:00Z",
+    transcribed: true,
+  },
+  {
+    id: "2",
+    user_id: "u1",
+    title: "打ち合わせ A",
+    file_path: "recordings/meeting-a.m4a",
+    duration_seconds: 900,
+    created_at: "2026-06-11T14:00:00Z",
+    transcribed: false,
+  },
+  {
+    id: "3",
+    user_id: "u1",
+    title: "週次レビュー",
+    file_path: "recordings/weekly-review.m4a",
+    duration_seconds: 3600,
+    created_at: "2026-06-10T09:00:00Z",
+    transcribed: true,
+  },
+];
+
+describe("filterRecordings", () => {
+  it("空クエリは全件返す", () => {
+    expect(filterRecordings(sampleRecordings, "")).toHaveLength(3);
+    expect(filterRecordings(sampleRecordings, "   ")).toHaveLength(3);
+  });
+
+  it("title で部分一致フィルタ", () => {
+    const result = filterRecordings(sampleRecordings, "MTG");
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("1");
+  });
+
+  it("file_path で部分一致フィルタ", () => {
+    const result = filterRecordings(sampleRecordings, "weekly");
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("3");
+  });
+
+  it("大文字小文字を区別しない", () => {
+    const result = filterRecordings(sampleRecordings, "mtg");
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("1");
+  });
+
+  it("一致しないクエリは空配列", () => {
+    const result = filterRecordings(sampleRecordings, "存在しない");
+    expect(result).toHaveLength(0);
+  });
+
+  it("空配列に対しては空配列を返す", () => {
+    expect(filterRecordings([], "test")).toHaveLength(0);
   });
 });
