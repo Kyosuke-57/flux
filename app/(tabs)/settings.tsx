@@ -664,6 +664,7 @@ const styles = StyleSheet.create({
     height: 1,
     marginHorizontal: 16,
   },
+  hintText: { fontSize: 12, lineHeight: 18 },
 
   // ── Buttons ──
   primaryButtonText: {
