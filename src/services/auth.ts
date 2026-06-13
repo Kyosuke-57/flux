@@ -122,8 +122,16 @@ export async function getCurrentUser() {
 }
 
 export async function getSession() {
-  const { data, error } = await supabase.auth.getSession();
-  return { session: data?.session ?? null, error };
+  try {
+    const { data, error } = await supabase.auth.getSession();
+    return { session: data?.session ?? null, error };
+  } catch (err) {
+    const message =
+      err instanceof Error
+        ? err.message
+        : "An unexpected error occurred while fetching session";
+    return { session: null, error: new Error(message) };
+  }
 }
 
 export function onAuthStateChange(
