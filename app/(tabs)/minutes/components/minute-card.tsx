@@ -1,10 +1,11 @@
-import React from "react";
+import React, { useCallback } from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { SwipeableRow } from "../../../../src/animations/gestures";
 import { HighlightedText } from "../../../../src/components/HighlightedText";
 import { GlassCard } from "../../../../src/components/Glass";
 import { Spacing, BorderRadius } from "../../../../src/theme";
+import { useFavorites } from "../../../../src/contexts/FavoritesContext";
 import type { Minute } from "../../../../src/types";
 import type { ColorsLight } from "../../../../src/theme";
 
@@ -35,6 +36,17 @@ export function MinuteCard({
   getPreview,
   color,
 }: Props) {
+  const { isFavorited, toggle } = useFavorites();
+  const favorited = isFavorited(item.id);
+
+  const handleToggleFavorite = useCallback(
+    (e: any) => {
+      e.stopPropagation?.();
+      toggle(item.id);
+    },
+    [item.id, toggle]
+  );
+
   return (
     <SwipeableRow onDelete={onDelete}>
       <TouchableOpacity
@@ -61,6 +73,18 @@ export function MinuteCard({
               highlight={search}
               style={{ ...styles.cardTitle, color: color.textPrimary }}
             />
+            {!selectMode && (
+              <TouchableOpacity
+                onPress={handleToggleFavorite}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons
+                  name={favorited ? "heart" : "heart-outline"}
+                  size={18}
+                  color={favorited ? color.primary : color.textMuted}
+                />
+              </TouchableOpacity>
+            )}
             <Text style={[styles.cardDate, { color: color.textMuted }]}>
               {formatDate(item.created_at)}
             </Text>

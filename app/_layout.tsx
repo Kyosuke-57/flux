@@ -6,6 +6,7 @@ import { StatusBar } from "expo-status-bar";
 import { AuthProvider } from "../src/contexts/AuthContext";
 import { SettingsProvider, useSettings } from "../src/contexts/SettingsContext";
 import { ToastProvider } from "../src/contexts/ToastContext";
+import { FavoritesProvider } from "../src/contexts/FavoritesContext";
 import { setHapticsEnabled } from "../src/animations/haptics";
 import { configureRevenueCat, syncRevenueCatEntitlements } from "../src/services/subscription";
 
@@ -48,10 +49,12 @@ export default function RootLayout() {
         <AuthProvider>
           <StatusBarManager />
           <ToastProvider>
-            <View style={{ flex: 1 }}>
-              <NavigationBackground />
-              <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: "transparent" } }} />
-            </View>
+            <FavoritesProvider>
+              <View style={{ flex: 1 }}>
+                <NavigationBackground />
+                <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: "transparent" } }} />
+              </View>
+            </FavoritesProvider>
           </ToastProvider>
         </AuthProvider>
       </SettingsProvider>

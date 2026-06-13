@@ -91,6 +91,13 @@ export default function TabLayout() {
       }}
     >
       <Tabs.Screen
+        name="favorites"
+        options={{
+          title: "お気に入り",
+          tabBarIcon: ({ focused }) => <TabIcon icon="heart" focused={focused} c={c} />,
+        }}
+      />
+      <Tabs.Screen
         name="index"
         options={{
           title: "録音",

@@ -26,6 +26,7 @@ import type { Minute, Template, Tag, Folder } from "../../src/types";
 import { Spacing, BorderRadius, theme } from "../../src/theme";
 import { useSettings } from "../../src/contexts/SettingsContext";
 import { useToast } from "../../src/contexts/ToastContext";
+import { useFavorites } from "../../src/contexts/FavoritesContext";
 import { Skeleton } from "../../src/components/Skeleton";
 import { ActionSheet, type ActionSheetOption } from "../../src/components/ActionSheet";
 import { INDUSTRY_TEMPLATES } from "../../src/data/industry-templates";
@@ -66,6 +67,12 @@ export default function MinuteDetailScreen() {
   const player = useAudioPlayer(recordingPathState ?? null, { updateInterval: 250 });
   const playerStatus = useAudioPlayerStatus(player);
   const toast = useToast();
+  const { isFavorited, toggle: toggleFavorite } = useFavorites();
+  const currentFavorited = id ? isFavorited(id) : false;
+
+  const handleToggleFavorite = useCallback(() => {
+    if (id) toggleFavorite(id);
+  }, [id, toggleFavorite]);
 
   const fmt = (s: number) => {
     if (!isFinite(s)) return "--:--";
@@ -683,6 +690,32 @@ export default function MinuteDetailScreen() {
         )}
 
         <TouchableOpacity
+          style={[
+            styles.favBtn,
+            {
+              backgroundColor: currentFavorited ? c.primaryBg : c.surfaceSecondary,
+            },
+          ]}
+          onPress={handleToggleFavorite}
+        >
+          <Ionicons
+            name={currentFavorited ? "heart" : "heart-outline"}
+            size={16}
+            color={currentFavorited ? c.primary : c.textMuted}
+          />
+          <Text
+            style={[
+              styles.favBtnText,
+              {
+                color: currentFavorited ? c.primary : c.textSecondary,
+              },
+            ]}
+          >
+            {currentFavorited ? "保存済み" : "保存"}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
           style={[styles.templateBtn, { backgroundColor: c.primaryBg }]}
           onPress={() => setTemplateModalVisible(true)}
         >
@@ -1065,6 +1098,15 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   deleteBtnText: { fontSize: 13, fontWeight: "600" },
+  favBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  favBtnText: { fontSize: 13, fontWeight: "500" },
   templateBtn: {
     flexDirection: "row",
     alignItems: "center",

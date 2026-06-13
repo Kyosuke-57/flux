@@ -91,6 +91,13 @@ export interface TranscriptionJob {
   updated_at: string;
 }
 
+export interface Favorite {
+  id: string;
+  user_id: string;
+  minute_id: string;
+  created_at: string;
+}
+
 export type SubscriptionPlan = "free" | "pro" | "byok";
 
 export const PLAN_LIMITS: Record<SubscriptionPlan, number> = {
