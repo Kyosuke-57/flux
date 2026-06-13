@@ -17,11 +17,17 @@ export async function signUp(email: string, password: string) {
 }
 
 export async function signIn(email: string, password: string) {
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  });
-  return { data, error };
+  try {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+    return { data, error };
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "An unexpected error occurred during sign in";
+    return { data: null, error: new Error(message) };
+  }
 }
 
 export async function signOut() {
