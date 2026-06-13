@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, ViewStyle } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { GlassCard } from "../../../../src/components/Glass";
 import { Spacing, BorderRadius } from "../../../../src/theme";
@@ -32,13 +32,13 @@ export function SubscriptionPlanCard({
 
   return (
     <GlassCard
-      style={[
-        styles.card,
-        plan.highlighted && {
+      style={{
+        ...styles.card,
+        ...(plan.highlighted ? {
           borderColor: planAccent,
           borderWidth: 1.5,
-        },
-      ]}
+        } : {}),
+      } as ViewStyle}
     >
       {/* Header row: icon + name + current badge */}
       <View style={styles.headerRow}>
