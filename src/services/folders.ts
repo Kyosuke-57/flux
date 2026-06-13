@@ -6,16 +6,24 @@ import type { Folder } from "../types";
  * 名前順でソート
  */
 export async function getAllFolders() {
-  const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError };
+  try {
+    const { user, error: authError } = await requireUser();
+    if (authError || !user) return { data: null, error: authError };
 
-  const { data, error } = await supabase
-    .from("folders")
-    .select("*")
-    .eq("user_id", user.id)
-    .order("name");
+    const { data, error } = await supabase
+      .from("folders")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("name");
 
-  return { data: data as Folder[] | null, error };
+    if (error) return { data: null, error };
+
+    return { data: data as Folder[] | null, error: null };
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "フォルダ一覧の取得中に予期しないエラーが発生しました";
+    return { data: null, error: new Error(message) };
+  }
 }
 
 /**
