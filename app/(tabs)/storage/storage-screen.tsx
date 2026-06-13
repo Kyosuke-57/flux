@@ -16,6 +16,7 @@ import { useStorageData } from "./hooks/use-storage-data";
 import { SearchBar } from "../minutes/components/search-bar";
 import { StorageCard } from "./components/storage-card";
 import { StorageFormModal } from "./components/storage-form-modal";
+import { SortControls } from "./components/sort-controls";
 import { EmptyState } from "./components/empty-state";
 import { LoadingSkeleton, UnauthenticatedView } from "./components/skeleton-state";
 
@@ -29,11 +30,14 @@ export default function StorageScreen() {
     loading,
     refreshing,
     search,
+    sortField,
+    sortDirection,
     formModalVisible,
     editingItem,
     formData,
     onRefresh,
     handleSearch,
+    handleSort,
     openCreateForm,
     openEditForm,
     handleDelete,
@@ -82,6 +86,12 @@ export default function StorageScreen() {
               <StorageHeader
                 count={items.length}
                 onCreate={openCreateForm}
+                color={c}
+              />
+              <SortControls
+                sortField={sortField}
+                sortDirection={sortDirection}
+                onSort={handleSort}
                 color={c}
               />
             </View>

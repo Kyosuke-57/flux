@@ -24,8 +24,26 @@ export function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
 }
 
-export function sortRecordings(list: Recording[]): Recording[] {
-  return [...list].sort(
-    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-  );
+export type SortField = "date" | "name" | "status";
+export type SortDirection = "asc" | "desc";
+
+const sortFieldMapping: Record<SortField, (r: Recording) => string | number | boolean> = {
+  date: (r) => new Date(r.created_at).getTime(),
+  name: (r) => r.title.toLowerCase(),
+  status: (r) => (r.transcribed ? 1 : 0),
+};
+
+export function sortRecordings(
+  list: Recording[],
+  field: SortField = "date",
+  direction: SortDirection = "desc",
+): Recording[] {
+  const getValue = sortFieldMapping[field];
+  return [...list].sort((a, b) => {
+    const va = getValue(a);
+    const vb = getValue(b);
+    if (va < vb) return direction === "asc" ? -1 : 1;
+    if (va > vb) return direction === "asc" ? 1 : -1;
+    return 0;
+  });
 }

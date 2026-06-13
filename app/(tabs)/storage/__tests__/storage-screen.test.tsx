@@ -5,7 +5,14 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { formatDate, formatDuration, formatFileSize } from "../hooks/utils";
+import {
+  formatDate,
+  formatDuration,
+  formatFileSize,
+  sortRecordings,
+  type SortField,
+  type SortDirection,
+} from "../hooks/utils";
 
 // ─── フレームワーク動作確認 ───────────────────────────────
 
@@ -50,6 +57,100 @@ describe("formatDate", () => {
     const result = formatDate("2025-01-01T00:00:00Z");
     expect(result).toContain("1月");
     expect(result).toContain("1日");
+  });
+});
+
+// ─── sortRecordings ──────────────────────────────────────────
+
+function makeRecording(
+  overrides: Partial<{
+    id: string;
+    title: string;
+    created_at: string;
+    transcribed: boolean;
+  }>,
+) {
+  return {
+    id: overrides.id ?? "rec_001",
+    user_id: "user_1",
+    title: overrides.title ?? "Test",
+    file_path: "test.m4a",
+    duration_seconds: 60,
+    created_at: overrides.created_at ?? "2026-06-01T00:00:00Z",
+    transcribed: overrides.transcribed ?? false,
+  };
+}
+
+describe("sortRecordings", () => {
+  const early = "2026-01-01T00:00:00Z";
+  const middle = "2026-06-15T00:00:00Z";
+  const late = "2026-12-31T00:00:00Z";
+
+  it("デフォルトは日付降順（新しい順）", () => {
+    const items = [
+      makeRecording({ id: "a", created_at: early }),
+      makeRecording({ id: "b", created_at: late }),
+      makeRecording({ id: "c", created_at: middle }),
+    ];
+    const sorted = sortRecordings(items);
+    expect(sorted.map((r) => r.id)).toEqual(["b", "c", "a"]);
+  });
+
+  it("日付昇順（古い順）", () => {
+    const items = [
+      makeRecording({ id: "a", created_at: late }),
+      makeRecording({ id: "b", created_at: early }),
+      makeRecording({ id: "c", created_at: middle }),
+    ];
+    const sorted = sortRecordings(items, "date", "asc");
+    expect(sorted.map((r) => r.id)).toEqual(["b", "c", "a"]);
+  });
+
+  it("名前昇順（あいうえお順）", () => {
+    const items = [
+      makeRecording({ id: "a", title: "aaa" }),
+      makeRecording({ id: "b", title: "ccc" }),
+      makeRecording({ id: "c", title: "bbb" }),
+    ];
+    const sorted = sortRecordings(items, "name", "asc");
+    expect(sorted.map((r) => r.id)).toEqual(["a", "c", "b"]);
+  });
+
+  it("名前降順", () => {
+    const items = [
+      makeRecording({ id: "a", title: "aaa" }),
+      makeRecording({ id: "b", title: "ccc" }),
+      makeRecording({ id: "c", title: "bbb" }),
+    ];
+    const sorted = sortRecordings(items, "name", "desc");
+    expect(sorted.map((r) => r.id)).toEqual(["b", "c", "a"]);
+  });
+
+  it("ステータス昇順（未文字起こし→文字起こし済み）", () => {
+    const items = [
+      makeRecording({ id: "a", transcribed: true }),
+      makeRecording({ id: "b", transcribed: false }),
+    ];
+    const sorted = sortRecordings(items, "status", "asc");
+    expect(sorted.map((r) => r.id)).toEqual(["b", "a"]);
+  });
+
+  it("ステータス降順（文字起こし済み→未文字起こし）", () => {
+    const items = [
+      makeRecording({ id: "a", transcribed: false }),
+      makeRecording({ id: "b", transcribed: true }),
+    ];
+    const sorted = sortRecordings(items, "status", "desc");
+    expect(sorted.map((r) => r.id)).toEqual(["b", "a"]);
+  });
+
+  it("同じ値の場合は元の順序を維持する（安定ソート）", () => {
+    const items = [
+      makeRecording({ id: "a", title: "same", created_at: early }),
+      makeRecording({ id: "b", title: "same", created_at: late }),
+    ];
+    const sorted = sortRecordings(items, "name", "asc");
+    expect(sorted.map((r) => r.id)).toEqual(["a", "b"]);
   });
 });
 

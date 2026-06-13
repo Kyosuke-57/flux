@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Alert } from "react-native";
 import { useAuth } from "../../../../src/contexts/AuthContext";
 import { useToast } from "../../../../src/contexts/ToastContext";
@@ -10,7 +10,7 @@ import {
   searchRecordings,
 } from "../../../../src/services/recordings";
 import type { Recording } from "../../../../src/types";
-import { sortRecordings } from "./utils";
+import { sortRecordings, type SortField, type SortDirection } from "./utils";
 
 export type RecordingFormData = {
   title: string;
@@ -34,6 +34,8 @@ export function useStorageData() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
+  const [sortField, setSortField] = useState<SortField>("date");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
 
   // フォームモーダル状態
   const [formModalVisible, setFormModalVisible] = useState(false);
@@ -50,7 +52,7 @@ export function useStorageData() {
       return;
     }
     const { data } = await getAllRecordings();
-    if (data) setItems(sortRecordings(data));
+    if (data) setItems(data);
     setLoading(false);
     setRefreshing(false);
   }, [user]);
@@ -70,11 +72,11 @@ export function useStorageData() {
     setSearch(query);
     if (!query.trim()) {
       const { data } = await getAllRecordings();
-      if (data) setItems(sortRecordings(data));
+      if (data) setItems(data);
       return;
     }
     const { data } = await searchRecordings(query);
-    if (data) setItems(sortRecordings(data));
+    if (data) setItems(data);
   }, []);
 
   // ── フォーム操作 ──
@@ -129,7 +131,7 @@ export function useStorageData() {
       return;
     }
     if (data) {
-      setItems((prev) => sortRecordings([data, ...prev]));
+      setItems((prev) => [data, ...prev]);
     }
     toast.showToast({ message: "作成しました", type: "success" });
     closeForm();
@@ -156,7 +158,7 @@ export function useStorageData() {
       return;
     }
     if (data) {
-      setItems((prev) => sortRecordings(prev.map((i) => (i.id === data.id ? data : i))));
+      setItems((prev) => prev.map((i) => (i.id === data.id ? data : i)));
     }
     toast.showToast({ message: "更新しました", type: "success" });
     closeForm();
@@ -188,9 +190,31 @@ export function useStorageData() {
     [items, toast],
   );
 
+  // ── ソート ──
+
+  const handleSort = useCallback((field: SortField) => {
+    setSortField((prevField) => {
+      if (prevField === field) {
+        // 同じフィールド → 昇順/降順をトグル
+        setSortDirection((prevDir) => (prevDir === "asc" ? "desc" : "asc"));
+        return prevField;
+      }
+      // 別のフィールド → 降順で設定
+      setSortDirection("desc");
+      return field;
+    });
+  }, []);
+
+  const sortedItems = useMemo(
+    () => sortRecordings(items, sortField, sortDirection),
+    [items, sortField, sortDirection],
+  );
+
   return {
     // データ
-    items,
+    items: sortedItems,
+    sortField,
+    sortDirection,
     loading,
     refreshing,
     search,
@@ -207,6 +231,7 @@ export function useStorageData() {
     openCreateForm,
     openEditForm,
     handleDelete,
+    handleSort,
 
     // アクション（フォーム）
     closeForm,
