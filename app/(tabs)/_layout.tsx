@@ -161,6 +161,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="templates"
+        options={{
+          title: "テンプレート",
+          tabBarIcon: ({ focused }) => <TabIcon icon="copy" focused={focused} c={c} />,
+        }}
+      />
+      <Tabs.Screen
         name="settings"
         options={{
           title: "設定",
