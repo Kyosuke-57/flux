@@ -31,6 +31,10 @@ export default function R2UploadScreen() {
     refreshing,
     searchQuery,
     setSearchQuery,
+    sortBy,
+    setSortBy,
+    sortOrder,
+    setSortOrder,
     formModalVisible,
     editingItem,
     formData,
@@ -80,6 +84,13 @@ export default function R2UploadScreen() {
               <SearchBar
                 value={searchQuery}
                 onChangeText={setSearchQuery}
+                color={c}
+              />
+              <SortControl
+                sortBy={sortBy}
+                sortOrder={sortOrder}
+                onSortByChange={setSortBy}
+                onSortOrderChange={setSortOrder}
                 color={c}
               />
               <View style={styles.headerRow}>
@@ -167,6 +178,116 @@ function SearchBar({
     </View>
   );
 }
+
+/** ソートコントロール */
+function SortControl({
+  sortBy,
+  sortOrder,
+  onSortByChange,
+  onSortOrderChange,
+  color,
+}: {
+  sortBy: "date" | "name" | "status";
+  sortOrder: "asc" | "desc";
+  onSortByChange: (field: "date" | "name" | "status") => void;
+  onSortOrderChange: (order: "asc" | "desc") => void;
+  color: ReturnType<typeof theme>;
+}) {
+  const SORT_OPTIONS: { value: "date" | "name" | "status"; label: string }[] = [
+    { value: "date", label: "日付" },
+    { value: "name", label: "名前" },
+    { value: "status", label: "ステータス" },
+  ];
+
+  return (
+    <View style={sortControlStyles.row}>
+      <View style={sortControlStyles.chips}>
+        {SORT_OPTIONS.map((opt) => {
+          const active = sortBy === opt.value;
+          return (
+            <TouchableOpacity
+              key={opt.value}
+              style={[
+                sortControlStyles.chip,
+                {
+                  backgroundColor: active ? color.primary : color.surface,
+                  borderColor: active ? color.primary : color.border,
+                },
+              ]}
+              onPress={() => onSortByChange(opt.value)}
+            >
+              <Text
+                style={[
+                  sortControlStyles.chipText,
+                  { color: active ? color.textInverse : color.textSecondary },
+                ]}
+              >
+                {opt.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+      <TouchableOpacity
+        style={[
+          sortControlStyles.orderBtn,
+          { backgroundColor: color.surface, borderColor: color.border },
+        ]}
+        onPress={() =>
+          onSortOrderChange(sortOrder === "asc" ? "desc" : "asc")
+        }
+        accessibilityLabel={sortOrder === "asc" ? "昇順" : "降順"}
+      >
+        <Ionicons
+          name={sortOrder === "asc" ? "arrow-up" : "arrow-down"}
+          size={14}
+          color={color.textPrimary}
+        />
+        <Text style={[sortControlStyles.orderText, { color: color.textSecondary }]}>
+          {sortOrder === "asc" ? "昇順" : "降順"}
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+const sortControlStyles = StyleSheet.create({
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 24,
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+  chips: {
+    flexDirection: "row",
+    gap: 6,
+  },
+  chip: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  chipText: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  orderBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  orderText: {
+    fontSize: 11,
+    fontWeight: "500",
+  },
+});
 
 const searchStyles = StyleSheet.create({
   wrapper: {

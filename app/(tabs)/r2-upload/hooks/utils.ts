@@ -30,8 +30,50 @@ export function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
 }
 
+export type SortField = "date" | "name" | "status";
+export type SortOrder = "asc" | "desc";
+
+/** ステータスの優先順位（ソート用） */
+const STATUS_ORDER: Record<string, number> = {
+  queued: 0,
+  processing: 1,
+  completed: 2,
+  failed: 3,
+};
+
+/**
+ * 指定されたフィールドと順序でジョブリストをソートする。
+ * ソート元の配列は変更せず、新しい配列を返す。
+ */
+export function sortJobsBy(
+  list: TranscriptionJob[],
+  field: SortField,
+  order: SortOrder,
+): TranscriptionJob[] {
+  return [...list].sort((a, b) => {
+    let cmp: number;
+    switch (field) {
+      case "date":
+        cmp =
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        break;
+      case "name":
+        cmp = a.file_name.localeCompare(b.file_name);
+        break;
+      case "status": {
+        const sa = STATUS_ORDER[a.status] ?? 99;
+        const sb = STATUS_ORDER[b.status] ?? 99;
+        cmp = sa - sb;
+        break;
+      }
+      default:
+        cmp = 0;
+    }
+    return order === "desc" ? -cmp : cmp;
+  });
+}
+
+/** 従来の sortJobs は互換性のために維持（日付降順） */
 export function sortJobs(list: TranscriptionJob[]): TranscriptionJob[] {
-  return [...list].sort(
-    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-  );
+  return sortJobsBy(list, "date", "desc");
 }

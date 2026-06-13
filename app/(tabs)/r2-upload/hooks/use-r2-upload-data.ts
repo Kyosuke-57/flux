@@ -9,7 +9,8 @@ import {
   deleteTranscriptionJob,
 } from "../../../../src/services/transcription-jobs";
 import type { TranscriptionJob } from "../../../../src/types";
-import { sortJobs } from "./utils";
+import { sortJobsBy, sortJobs } from "./utils";
+import type { SortField, SortOrder } from "./utils";
 
 export type JobFormData = {
   file_name: string;
@@ -38,15 +39,24 @@ export function useR2UploadData() {
   // 検索
   const [searchQuery, setSearchQuery] = useState("");
 
+  // ソート
+  const [sortBy, setSortBy] = useState<SortField>("date");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
+
   const filteredItems = useMemo(() => {
-    if (!searchQuery.trim()) return items;
-    const q = searchQuery.trim().toLowerCase();
-    return items.filter(
-      (item) =>
-        item.file_name.toLowerCase().includes(q) ||
-        item.r2_key.toLowerCase().includes(q),
-    );
-  }, [items, searchQuery]);
+    // 1. 検索フィルター
+    let result = items;
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      result = items.filter(
+        (item) =>
+          item.file_name.toLowerCase().includes(q) ||
+          item.r2_key.toLowerCase().includes(q),
+      );
+    }
+    // 2. ソート
+    return sortJobsBy(result, sortBy, sortOrder);
+  }, [items, searchQuery, sortBy, sortOrder]);
 
   // フォームモーダル状態
   const [formModalVisible, setFormModalVisible] = useState(false);
@@ -201,6 +211,12 @@ export function useR2UploadData() {
     // 検索
     searchQuery,
     setSearchQuery,
+
+    // ソート
+    sortBy,
+    setSortBy,
+    sortOrder,
+    setSortOrder,
 
     // フォーム
     formModalVisible,
