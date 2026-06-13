@@ -16,7 +16,7 @@ import { useSettings } from "../../../src/contexts/SettingsContext";
 import { useFavorites } from "../../../src/contexts/FavoritesContext";
 import { theme, Spacing, BorderRadius } from "../../../src/theme";
 import { GlassCard } from "../../../src/components/Glass";
-import { useFavoritesData } from "./hooks/use-favorites-data";
+import { useFavoritesData, type SortKey } from "./hooks/use-favorites-data";
 import { EmptyState } from "./components/empty-state";
 import { LoadingSkeleton, UnauthenticatedView } from "./components/skeleton-state";
 
@@ -27,6 +27,7 @@ export default function FavoritesScreen() {
 
   const {
     favorites,
+    sortedFavorites,
     loading,
     refreshing,
     onRefresh,
@@ -34,6 +35,10 @@ export default function FavoritesScreen() {
     getPreview,
     formatDate,
     getTagName,
+    sortKey,
+    sortOrder,
+    setSortKey,
+    setSortOrder,
   } = useFavoritesData();
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -41,15 +46,15 @@ export default function FavoritesScreen() {
   const filteredFavorites = useMemo(
     () =>
       searchQuery.trim() === ""
-        ? favorites
-        : favorites.filter((item) => {
+        ? sortedFavorites
+        : sortedFavorites.filter((item) => {
             const q = searchQuery.toLowerCase();
             return (
               item.title.toLowerCase().includes(q) ||
               item.content.toLowerCase().includes(q)
             );
           }),
-    [favorites, searchQuery],
+    [sortedFavorites, searchQuery],
   );
 
   // ── Loading ──
@@ -100,6 +105,57 @@ export default function FavoritesScreen() {
                 <Ionicons name="close-circle" size={18} color={c.textMuted} />
               </TouchableOpacity>
             )}
+          </View>
+        </View>
+      )}
+
+      {/* 並び替え */}
+      {favorites.length > 0 && (
+        <View style={[styles.sortContainer, { borderColor: c.border }]}>
+          <View style={styles.sortSegmentRow}>
+            {(["date", "name", "status"] as SortKey[]).map((key) => {
+              const labels: Record<SortKey, string> = {
+                date: "日付",
+                name: "名前",
+                status: "ステータス",
+              };
+              const isActive = sortKey === key;
+              return (
+                <TouchableOpacity
+                  key={key}
+                  style={[
+                    styles.sortSegment,
+                    isActive && { backgroundColor: c.primary },
+                    isActive && { borderColor: c.primary },
+                  ]}
+                  onPress={() => {
+                    if (isActive) {
+                      setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
+                    } else {
+                      setSortKey(key);
+                      setSortOrder("desc");
+                    }
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.sortSegmentText,
+                      { color: isActive ? "#fff" : c.textSecondary },
+                    ]}
+                  >
+                    {labels[key]}
+                  </Text>
+                  {isActive && (
+                    <Ionicons
+                      name={sortOrder === "desc" ? "chevron-down" : "chevron-up"}
+                      size={14}
+                      color="#fff"
+                      style={{ marginLeft: 2 }}
+                    />
+                  )}
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
       )}
@@ -244,6 +300,31 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 12,
     lineHeight: 20,
+  },
+
+  sortContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: Spacing.xxl,
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  sortSegmentRow: {
+    flexDirection: "row",
+    gap: 6,
+  },
+  sortSegment: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "transparent",
+  },
+  sortSegmentText: {
+    fontSize: 13,
+    fontWeight: "500",
   },
 
 });
