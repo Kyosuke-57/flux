@@ -31,8 +31,14 @@ export async function signIn(email: string, password: string) {
 }
 
 export async function signOut() {
-  const { error } = await supabase.auth.signOut();
-  return { error };
+  try {
+    const { error } = await supabase.auth.signOut();
+    return { error };
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "An unexpected error occurred during sign out";
+    return { error: new Error(message) };
+  }
 }
 
 /**
