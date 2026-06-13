@@ -9,7 +9,8 @@ import {
   deleteRecording,
 } from "../../../../src/services/recordings";
 import type { Recording } from "../../../../src/types";
-import { filterRecordings } from "./utils";
+import { filterRecordings, sortRecordings } from "./utils";
+import type { SortField, SortDirection } from "./utils";
 
 export type RecordingFormData = {
   title: string;
@@ -34,9 +35,24 @@ export function useRecordingData() {
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
+  const [sortField, setSortField] = useState<SortField>("date");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+
+  const toggleSort = useCallback(
+    (field: SortField) => {
+      if (sortField === field) {
+        setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+      } else {
+        setSortField(field);
+        setSortDirection("desc");
+      }
+    },
+    [sortField],
+  );
+
   const filteredItems = useMemo(
-    () => filterRecordings(items, searchQuery),
-    [items, searchQuery],
+    () => sortRecordings(filterRecordings(items, searchQuery), { field: sortField, direction: sortDirection }),
+    [items, searchQuery, sortField, sortDirection],
   );
 
   // フォームモーダル状態
@@ -189,6 +205,11 @@ export function useRecordingData() {
     // 検索
     searchQuery,
     setSearchQuery,
+
+    // ソート
+    sortField,
+    sortDirection,
+    toggleSort,
 
     // フォーム
     formModalVisible,

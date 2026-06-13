@@ -10,7 +10,9 @@ import {
   formatDuration,
   formatFileSize,
   filterRecordings,
+  sortRecordings,
 } from "../hooks/utils";
+import type { SortConfig } from "../hooks/utils";
 import type { Recording } from "../../../src/types";
 
 // ─── フレームワーク動作確認 ───────────────────────────────
@@ -142,5 +144,98 @@ describe("filterRecordings", () => {
 
   it("空配列に対しては空配列を返す", () => {
     expect(filterRecordings([], "test")).toHaveLength(0);
+  });
+});
+
+// ─── sortRecordings ─────────────────────────────────────────
+
+describe("sortRecordings", () => {
+  const unsorted: Recording[] = [
+    {
+      id: "1",
+      user_id: "u1",
+      title: "B定例",
+      file_path: "b.m4a",
+      duration_seconds: 100,
+      created_at: "2026-06-12T10:00:00Z",
+      transcribed: false,
+    },
+    {
+      id: "2",
+      user_id: "u1",
+      title: "A打ち合わせ",
+      file_path: "a.m4a",
+      duration_seconds: 200,
+      created_at: "2026-06-10T10:00:00Z",
+      transcribed: true,
+    },
+    {
+      id: "3",
+      user_id: "u1",
+      title: "Cレビュー",
+      file_path: "c.m4a",
+      duration_seconds: 300,
+      created_at: "2026-06-11T10:00:00Z",
+      transcribed: false,
+    },
+  ];
+
+  it("date desc: 新しい日付が先頭", () => {
+    const config: SortConfig = { field: "date", direction: "desc" };
+    const result = sortRecordings(unsorted, config);
+    expect(result[0].id).toBe("1");
+    expect(result[1].id).toBe("3");
+    expect(result[2].id).toBe("2");
+  });
+
+  it("date asc: 古い日付が先頭", () => {
+    const config: SortConfig = { field: "date", direction: "asc" };
+    const result = sortRecordings(unsorted, config);
+    expect(result[0].id).toBe("2");
+    expect(result[1].id).toBe("3");
+    expect(result[2].id).toBe("1");
+  });
+
+  it("name asc: 辞書順昇順", () => {
+    const config: SortConfig = { field: "name", direction: "asc" };
+    const result = sortRecordings(unsorted, config);
+    expect(result[0].title).toBe("A打ち合わせ");
+    expect(result[1].title).toBe("B定例");
+    expect(result[2].title).toBe("Cレビュー");
+  });
+
+  it("name desc: 辞書順降順", () => {
+    const config: SortConfig = { field: "name", direction: "desc" };
+    const result = sortRecordings(unsorted, config);
+    expect(result[0].title).toBe("Cレビュー");
+    expect(result[1].title).toBe("B定例");
+    expect(result[2].title).toBe("A打ち合わせ");
+  });
+
+  it("status asc: false → true の順", () => {
+    const config: SortConfig = { field: "status", direction: "asc" };
+    const result = sortRecordings(unsorted, config);
+    expect(result[0].transcribed).toBe(false);
+    expect(result[1].transcribed).toBe(false);
+    expect(result[2].transcribed).toBe(true);
+  });
+
+  it("status desc: true → false の順", () => {
+    const config: SortConfig = { field: "status", direction: "desc" };
+    const result = sortRecordings(unsorted, config);
+    expect(result[0].transcribed).toBe(true);
+    expect(result[1].transcribed).toBe(false);
+    expect(result[2].transcribed).toBe(false);
+  });
+
+  it("空配列は空配列を返す", () => {
+    const config: SortConfig = { field: "date", direction: "asc" };
+    expect(sortRecordings([], config)).toEqual([]);
+  });
+
+  it("元の配列を変更しない（イミュータブル）", () => {
+    const original = [...unsorted];
+    sortRecordings(unsorted, { field: "name", direction: "asc" });
+    expect(unsorted).toEqual(original);
   });
 });

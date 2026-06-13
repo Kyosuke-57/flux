@@ -17,6 +17,7 @@ import { RecordingCard } from "./components/recording-card";
 import { RecordingFormModal } from "./components/recording-form-modal";
 import { EmptyState } from "./components/empty-state";
 import { SearchBar } from "./components/search-bar";
+import { SortControls } from "./components/sort-controls";
 import { LoadingSkeleton, UnauthenticatedView } from "./components/skeleton-state";
 
 export default function RecordingScreen() {
@@ -31,6 +32,9 @@ export default function RecordingScreen() {
     refreshing,
     searchQuery,
     setSearchQuery,
+    sortField,
+    sortDirection,
+    toggleSort,
     formModalVisible,
     editingItem,
     formData,
@@ -80,6 +84,12 @@ export default function RecordingScreen() {
               <SearchBar
                 value={searchQuery}
                 onChangeText={setSearchQuery}
+                color={c}
+              />
+              <SortControls
+                sortField={sortField}
+                sortDirection={sortDirection}
+                onToggle={toggleSort}
                 color={c}
               />
               <View style={styles.headerRow}>
