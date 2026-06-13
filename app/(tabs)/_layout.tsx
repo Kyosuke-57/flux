@@ -91,6 +91,13 @@ export default function TabLayout() {
       }}
     >
       <Tabs.Screen
+        name="dashboard"
+        options={{
+          title: "ダッシュボード",
+          tabBarIcon: ({ focused }) => <TabIcon icon="grid" focused={focused} c={c} />,
+        }}
+      />
+      <Tabs.Screen
         name="favorites"
         options={{
           title: "お気に入り",
@@ -179,6 +186,13 @@ export default function TabLayout() {
         options={{
           title: "テンプレート",
           tabBarIcon: ({ focused }) => <TabIcon icon="copy" focused={focused} c={c} />,
+        }}
+      />
+      <Tabs.Screen
+        name="export"
+        options={{
+          title: "エクスポート",
+          tabBarIcon: ({ focused }) => <TabIcon icon="share" focused={focused} c={c} />,
         }}
       />
       <Tabs.Screen

@@ -98,6 +98,15 @@ export interface Favorite {
   created_at: string;
 }
 
+export interface ExportItem {
+  id: string;
+  user_id: string;
+  minute_id?: string;
+  title: string;
+  format: "txt" | "md" | "pdf";
+  created_at: string;
+}
+
 export type SubscriptionPlan = "free" | "pro" | "byok";
 
 export const PLAN_LIMITS: Record<SubscriptionPlan, number> = {
