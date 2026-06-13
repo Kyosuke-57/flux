@@ -5,7 +5,13 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { secondsToHms, getPlanColor, getPlanIcon } from "../hooks/utils";
+import {
+  secondsToHms,
+  getPlanColor,
+  getPlanIcon,
+  filterPlans,
+} from "../hooks/utils";
+import type { PlanInfo } from "../../../../src/services/subscription";
 
 // ─── フレームワーク動作確認 ───────────────────────────────
 
@@ -94,5 +100,79 @@ describe("getPlanIcon", () => {
 
   it("不明なプランIDはcafe-outlineを返す", () => {
     expect(getPlanIcon("unknown" as any)).toBe("cafe-outline");
+  });
+});
+
+// ─── filterPlans ───────────────────────────────────────────
+
+const mockPlans: PlanInfo[] = [
+  {
+    id: "free",
+    name: "Free",
+    price: "無料",
+    monthlyMinutes: 30,
+    features: ["月30分までの録音", "基本的な文字起こし", "10件までの議事録保存"],
+  },
+  {
+    id: "pro",
+    name: "Pro",
+    price: "¥500/月",
+    monthlyMinutes: 120,
+    features: ["月120分までの録音", "高品質文字起こし", "無制限の議事録保存"],
+    highlighted: true,
+  },
+  {
+    id: "byok",
+    name: "Max",
+    price: "¥1,500/月",
+    monthlyMinutes: 600,
+    features: ["月10時間までの録音", "最優先・高精度文字起こし", "チーム共有機能"],
+  },
+];
+
+describe("filterPlans", () => {
+  it("空クエリは全件返す", () => {
+    expect(filterPlans(mockPlans, "")).toHaveLength(3);
+    expect(filterPlans(mockPlans, "   ")).toHaveLength(3);
+  });
+
+  it("プラン名でフィルタする（部分一致・大文字小文字区別なし）", () => {
+    const result = filterPlans(mockPlans, "pro");
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("pro");
+  });
+
+  it("日本語プラン名でフィルタする", () => {
+    const result = filterPlans(mockPlans, "max");
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("byok");
+  });
+
+  it("価格「無料」でフィルタする", () => {
+    const result = filterPlans(mockPlans, "無料");
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("free");
+  });
+
+  it("価格「1,500」でフィルタする", () => {
+    const result = filterPlans(mockPlans, "1,500");
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("byok");
+  });
+
+  it("機能説明でフィルタする", () => {
+    const result = filterPlans(mockPlans, "文字起こし");
+    expect(result).toHaveLength(3);
+  });
+
+  it("特定のプランのみヒットする機能でフィルタする", () => {
+    const result = filterPlans(mockPlans, "チーム共有");
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("byok");
+  });
+
+  it("該当なしの場合は空配列を返す", () => {
+    const result = filterPlans(mockPlans, "zzzzzzz");
+    expect(result).toHaveLength(0);
   });
 });

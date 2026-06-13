@@ -1,5 +1,23 @@
 // ─── サブスクリプション画面 ユーティリティ関数 ─────────────────
 
+import type { PlanInfo } from "../../../../src/services/subscription";
+
+/**
+ * プラン一覧を検索クエリでフィルタリングする。
+ * name / price / features のいずれかに部分一致するプランを返す。
+ * クエリが空の場合は全件返す。
+ */
+export function filterPlans(plans: PlanInfo[], query: string): PlanInfo[] {
+  if (!query.trim()) return plans;
+  const q = query.trim().toLowerCase();
+  return plans.filter(
+    (plan) =>
+      plan.name.toLowerCase().includes(q) ||
+      plan.price.toLowerCase().includes(q) ||
+      plan.features.some((f) => f.toLowerCase().includes(q)),
+  );
+}
+
 /**
  * ISO日付文字列を日本語ロケールの日付形式に変換する
  * 例: "2026-06-13T12:00:00Z" → "2026年6月13日"

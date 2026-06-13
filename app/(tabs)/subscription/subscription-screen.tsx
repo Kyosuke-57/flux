@@ -1,18 +1,20 @@
-import React from "react";
+import React, { useState, useMemo } from "react";
 import {
   FlatList,
   RefreshControl,
   StyleSheet,
   View,
   Text,
+  TextInput,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../../src/contexts/AuthContext";
 import { useSettings } from "../../../src/contexts/SettingsContext";
 import { theme } from "../../../src/theme";
 import { useSubscriptionData } from "./hooks/use-subscription-data";
 import { PLANS } from "../../../src/services/subscription";
-import { secondsToHms } from "./hooks/utils";
+import { secondsToHms, filterPlans } from "./hooks/utils";
 import { SubscriptionPlanCard } from "./components/subscription-plan-card";
 import { EmptyState } from "./components/empty-state";
 import { LoadingSkeleton } from "./components/skeleton-state";
@@ -50,6 +52,12 @@ export default function SubscriptionScreen() {
 
   const currentPlanId = currentPlan?.plan ?? null;
 
+  const [searchQuery, setSearchQuery] = useState("");
+  const filteredPlans = useMemo(
+    () => filterPlans(PLANS, searchQuery),
+    [searchQuery],
+  );
+
   return (
     <SafeAreaView
       style={[styles.container, { backgroundColor: c.background }]}
@@ -62,12 +70,45 @@ export default function SubscriptionScreen() {
         </Text>
       </View>
 
+      <View
+        style={[
+          styles.searchContainer,
+          { backgroundColor: c.surface, borderColor: c.border },
+        ]}
+      >
+        <Ionicons
+          name="search"
+          size={18}
+          color={c.textMuted}
+          style={styles.searchIcon}
+        />
+        <TextInput
+          style={[styles.searchInput, { color: c.textPrimary }]}
+          placeholder="プランを検索（名前・機能）"
+          placeholderTextColor={c.textMuted}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          autoCapitalize="none"
+          autoCorrect={false}
+          returnKeyType="search"
+          clearButtonMode="while-editing"
+        />
+        {searchQuery.length > 0 && (
+          <Ionicons
+            name="close-circle"
+            size={18}
+            color={c.textMuted}
+            onPress={() => setSearchQuery("")}
+          />
+        )}
+      </View>
+
       {/* コンテンツ */}
       {!currentPlan ? (
         <EmptyState type="no-subscription" color={c} />
       ) : (
         <FlatList
-          data={PLANS}
+          data={filteredPlans}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
           refreshControl={
@@ -132,6 +173,15 @@ export default function SubscriptionScreen() {
               </View>
             </View>
           }
+          ListEmptyComponent={
+            searchQuery.length > 0 ? (
+              <View style={styles.noResults}>
+                <Text style={[styles.noResultsText, { color: c.textSecondary }]}>
+                  该当するプランが見つかりません
+                </Text>
+              </View>
+            ) : null
+          }
           renderItem={({ item }) => (
             <SubscriptionPlanCard
               plan={item}
@@ -161,6 +211,31 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 28,
     fontWeight: "700",
+  },
+  searchContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginHorizontal: 24,
+    marginBottom: 8,
+    paddingHorizontal: 14,
+    height: 42,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    paddingVertical: 0,
+  },
+  noResults: {
+    paddingVertical: 60,
+    alignItems: "center",
+  },
+  noResultsText: {
+    fontSize: 14,
   },
   list: { paddingBottom: 24 },
   currentPlanSection: {
