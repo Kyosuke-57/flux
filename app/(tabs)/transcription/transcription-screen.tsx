@@ -5,7 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../../../src/contexts/AuthContext";
 import { useSettings } from "../../../src/contexts/SettingsContext";
 import { theme } from "../../../src/theme";
-import { useTranscriptionData, type StatusFilter } from "./hooks/use-transcription-data";
+import { useTranscriptionData, type StatusFilter, type SortField, type SortDirection } from "./hooks/use-transcription-data";
 import { TranscriptionCard } from "./components/transcription-card";
 import { EmptyState } from "./components/empty-state";
 import { LoadingSkeleton, UnauthenticatedView } from "./components/skeleton-state";
@@ -13,6 +13,18 @@ import { CreateTranscriptionModal } from "./components/create-transcription-moda
 import { EditTranscriptionModal } from "./components/edit-transcription-modal";
 
 const FILTER_OPTIONS: { key: StatusFilter; label: string }[] = [
+  { key: "all", label: "すべて" },
+  { key: "queued", label: "待機中" },
+  { key: "processing", label: "処理中" },
+  { key: "completed", label: "完了" },
+  { key: "failed", label: "失敗" },
+];
+
+const SORT_OPTIONS: { key: SortField; label: string }[] = [
+  { key: "date", label: "日付" },
+  { key: "name", label: "名前" },
+  { key: "status", label: "ステータス" },
+];
   { key: "all", label: "すべて" },
   { key: "queued", label: "待機中" },
   { key: "processing", label: "処理中" },
@@ -29,12 +41,16 @@ export default function TranscriptionScreen() {
     jobs,
     recordings,
     statusFilter,
+    sortField,
+    sortDirection,
     loading,
     refreshing,
     createModalVisible,
     editModalVisible,
     editingJob,
     setStatusFilter,
+    setSortField,
+    setSortDirection,
     setCreateModalVisible,
     setEditModalVisible,
     handleCreate,
@@ -96,6 +112,52 @@ export default function TranscriptionScreen() {
             </Text>
           </TouchableOpacity>
         ))}
+      </View>
+
+      {/* ソートバー */}
+      <View style={[styles.sortRow, { borderBottomColor: c.divider }]}>
+        <View style={styles.sortChips}>
+          {SORT_OPTIONS.map((opt) => (
+            <TouchableOpacity
+              key={opt.key}
+              style={[
+                styles.sortChip,
+                { backgroundColor: c.surfaceSecondary },
+                sortField === opt.key && { backgroundColor: c.primary + "20" },
+              ]}
+              onPress={() => {
+                if (sortField === opt.key) {
+                  setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+                } else {
+                  setSortField(opt.key);
+                }
+              }}
+            >
+              <Text
+                style={[
+                  styles.sortChipText,
+                  { color: c.textSecondary },
+                  sortField === opt.key && { color: c.primary, fontWeight: "600" },
+                ]}
+              >
+                {opt.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <TouchableOpacity
+          style={[styles.sortDirBtn, { backgroundColor: c.surfaceSecondary }]}
+          onPress={() => setSortDirection(sortDirection === "asc" ? "desc" : "asc")}
+        >
+          <Ionicons
+            name={sortDirection === "asc" ? "arrow-up" : "arrow-down"}
+            size={14}
+            color={c.textSecondary}
+          />
+          <Text style={[styles.sortDirText, { color: c.textSecondary }]}>
+            {sortDirection === "asc" ? "昇順" : "降順"}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {/* 一覧 / 空状態 */}
@@ -186,5 +248,32 @@ const styles = StyleSheet.create({
     borderRadius: 14,
   },
   filterChipText: { fontSize: 12, fontWeight: "500" },
+  sortRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 24,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+  },
+  sortChips: {
+    flexDirection: "row",
+    gap: 6,
+  },
+  sortChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  sortChipText: { fontSize: 12, fontWeight: "500" },
+  sortDirBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  sortDirText: { fontSize: 11, fontWeight: "500" },
   list: { paddingBottom: 24 },
 });

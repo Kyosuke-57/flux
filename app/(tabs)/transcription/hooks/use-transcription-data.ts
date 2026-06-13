@@ -15,6 +15,8 @@ import type { TranscriptionJob, Recording } from "../../../../src/types";
 // ─── 型定義 ────────────────────────────────────────────────
 
 export type StatusFilter = "all" | "queued" | "processing" | "completed" | "failed";
+export type SortField = "date" | "name" | "status";
+export type SortDirection = "asc" | "desc";
 
 // ─── カスタムフック ─────────────────────────────────────────
 
@@ -28,6 +30,8 @@ export function useTranscriptionData() {
 
   // ── UI状態 ──
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [sortField, setSortField] = useState<SortField>("date");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -177,17 +181,36 @@ export function useTranscriptionData() {
   }, []);
 
   // ── フィルタリング ──
-  const filteredJobs =
+  const filteredJobs: TranscriptionJob[] =
     statusFilter === "all"
       ? jobs
       : jobs.filter((j) => j.status === statusFilter);
 
+  // ── ソート ──
+  const sortedJobs: TranscriptionJob[] = [...filteredJobs].sort((a, b) => {
+    let cmp = 0;
+    switch (sortField) {
+      case "date":
+        cmp = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        break;
+      case "name":
+        cmp = a.file_name.localeCompare(b.file_name);
+        break;
+      case "status":
+        cmp = a.status.localeCompare(b.status);
+        break;
+    }
+    return sortDirection === "asc" ? cmp : -cmp;
+  });
+
   // ── 戻り値 ──
   return {
     // データ
-    jobs: filteredJobs,
+    jobs: sortedJobs,
     recordings,
     statusFilter,
+    sortField,
+    sortDirection,
     loading,
     refreshing,
 
@@ -198,6 +221,8 @@ export function useTranscriptionData() {
 
     // セッター
     setStatusFilter,
+    setSortField,
+    setSortDirection,
     setCreateModalVisible,
     setEditModalVisible,
     setEditingJob,
