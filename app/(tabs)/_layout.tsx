@@ -112,6 +112,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="calendar"
+        options={{
+          title: "カレンダー",
+          tabBarIcon: ({ focused }) => <TabIcon icon="calendar" focused={focused} c={c} />,
+        }}
+      />
+      <Tabs.Screen
         name="tags"
         options={{
           title: "タグ",
