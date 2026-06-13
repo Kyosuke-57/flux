@@ -95,6 +95,39 @@ export default function CalendarScreen() {
     );
   }, [selectedMinutes, searchQuery]);
 
+  // ── ソート ──
+  type SortBy = "date" | "name" | "status";
+  type SortDirection = "asc" | "desc";
+
+  const [sortBy, setSortBy] = useState<SortBy>("date");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+
+  const toggleSortDirection = useCallback(() => {
+    setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+  }, []);
+
+  const sortedMinutes = useMemo(() => {
+    const sorted = [...filteredMinutes];
+    sorted.sort((a, b) => {
+      let cmp = 0;
+      switch (sortBy) {
+        case "date":
+          cmp =
+            new Date(a.created_at).getTime() -
+            new Date(b.created_at).getTime();
+          break;
+        case "name":
+          cmp = a.title.localeCompare(b.title);
+          break;
+        case "status":
+          cmp = (a.tags?.length ?? 0) - (b.tags?.length ?? 0);
+          break;
+      }
+      return sortDirection === "asc" ? cmp : -cmp;
+    });
+    return sorted;
+  }, [filteredMinutes, sortBy, sortDirection]);
+
   // ── 未認証 ──
   if (!user) {
     return (
@@ -120,7 +153,7 @@ export default function CalendarScreen() {
       edges={["top", "left", "right"]}
     >
       <FlatList
-        data={filteredMinutes}
+        data={sortedMinutes}
         keyExtractor={(item) => item.id}
         refreshControl={
           <RefreshControl
@@ -198,6 +231,65 @@ export default function CalendarScreen() {
               )}
             </View>
 
+            {/* ── ソートコントロール ── */}
+            <View style={styles.sortContainer}>
+              <View style={styles.sortChips}>
+                {(
+                  [
+                    { key: "date", label: "日付" },
+                    { key: "name", label: "名前" },
+                    { key: "status", label: "ステータス" },
+                  ] as const
+                ).map((opt) => (
+                  <TouchableOpacity
+                    key={opt.key}
+                    activeOpacity={0.7}
+                    onPress={() => setSortBy(opt.key)}
+                    style={[
+                      styles.sortChip,
+                      {
+                        backgroundColor:
+                          sortBy === opt.key ? c.primary : c.surface,
+                        borderColor:
+                          sortBy === opt.key ? c.primary : c.border,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.sortChipText,
+                        {
+                          color:
+                            sortBy === opt.key ? "#fff" : c.textSecondary,
+                        },
+                      ]}
+                    >
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={toggleSortDirection}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                style={[
+                  styles.sortDirButton,
+                  { backgroundColor: c.surface, borderColor: c.border },
+                ]}
+              >
+                <Ionicons
+                  name={
+                    sortDirection === "asc"
+                      ? "arrow-up"
+                      : "arrow-down"
+                  }
+                  size={16}
+                  color={c.textSecondary}
+                />
+              </TouchableOpacity>
+            </View>
+
             {/* ── 選択日ラベル ── */}
             {selectedDateKey && (
               <View style={styles.selectedDateSection}>
@@ -205,7 +297,7 @@ export default function CalendarScreen() {
                   {formatDateLabel(selectedDateKey)}
                 </Text>
                 <Text style={[styles.minuteCount, { color: c.textMuted }]}>
-                  {filteredMinutes.length} 件
+                  {sortedMinutes.length} 件
                 </Text>
               </View>
             )}
@@ -275,6 +367,37 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     paddingVertical: 0,
+  },
+
+  /* ソートコントロール */
+  sortContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 24,
+    marginTop: 16,
+  },
+  sortChips: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  sortChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+  },
+  sortChipText: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  sortDirButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   /* 選択日 */
