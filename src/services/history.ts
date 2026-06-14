@@ -70,11 +70,10 @@ export function getActivityStatusLabel(status: string | undefined): string {
 
 // ─── プライベートヘルパー ─────────────────────────────────
 
-type AuthenticateUserResult =
+async function authenticateUser(): Promise<
   | { user: { id: string } }
-  | { error: Error | PostgrestError | null };
-
-async function authenticateUser(): Promise<AuthenticateUserResult> {
+  | { error: Error | PostgrestError | null }
+> {
   const { user, error: authError } = await requireUser();
   if (authError || !user)
     return { error: authError as unknown as PostgrestError | Error | null };
