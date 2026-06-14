@@ -134,6 +134,39 @@ function handleRealtimeStatus(
 }
 
 /**
+ * Realtime postgres_changes フィルター設定を生成する
+ */
+function createRealtimeFilter(jobId: string) {
+  return {
+    event: "UPDATE" as const,
+    schema: "public" as const,
+    table: "transcription_jobs" as const,
+    filter: `id=eq.${jobId}`,
+  };
+}
+
+/**
+ * postgres_changes 変更イベントハンドラ
+ */
+function onPostgresChange(
+  payload: RealtimePostgresChangesPayload<TranscriptionJobRow>,
+  onProgress: ProgressCallback,
+  channel: ReturnType<typeof supabase.channel>,
+): void {
+  handleRecordChange(payload.new as TranscriptionJobRow, onProgress, channel);
+}
+
+/**
+ * 購読ステータス変更ハンドラ
+ */
+function onSubscribeStatus(
+  status: string,
+  onError?: (error: string) => void,
+): void {
+  handleRealtimeStatus(status, onError);
+}
+
+/**
  * チャンネル購読解除関数を生成する
  */
 function createUnsubscriber(
@@ -156,21 +189,10 @@ export function subscribeToTranscription(
 ): () => void {
   const channel = supabase
     .channel(getChannelName(jobId))
-    .on(
-      "postgres_changes",
-      {
-        event: "UPDATE",
-        schema: "public",
-        table: "transcription_jobs",
-        filter: `id=eq.${jobId}`,
-      },
-      (payload: RealtimePostgresChangesPayload<TranscriptionJobRow>) => {
-        handleRecordChange(payload.new as TranscriptionJobRow, onProgress, channel);
-      },
+    .on("postgres_changes", createRealtimeFilter(jobId), (payload) =>
+      onPostgresChange(payload, onProgress, channel),
     )
-    .subscribe((status) => {
-      handleRealtimeStatus(status, onError);
-    });
+    .subscribe((status) => onSubscribeStatus(status, onError));
 
   return createUnsubscriber(channel);
 }
