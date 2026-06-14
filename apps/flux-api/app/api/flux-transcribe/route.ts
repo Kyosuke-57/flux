@@ -186,7 +186,7 @@ export async function POST(req: NextRequest) {
     // ---- R2 音声ファイルを自動削除 ----
     try {
       await deleteObject(r2Key);
-      console.log(`R2 音声削除完了: ${r2Key}`);
+      console.info(`R2 音声削除完了: ${r2Key}`);
     } catch (deleteError) {
       console.error(`R2 音声削除失敗: ${r2Key}`, deleteError);
     }
