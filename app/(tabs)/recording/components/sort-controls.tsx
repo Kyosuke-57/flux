@@ -2,7 +2,7 @@ import React from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { SortField, SortDirection } from "../hooks/utils";
-import type { ColorsLight } from "../../../src/theme";
+import type { ColorsLight } from "../../../../src/theme";
 
 type Props = {
   sortField: SortField;
