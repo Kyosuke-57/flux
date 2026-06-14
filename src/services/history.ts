@@ -80,28 +80,34 @@ async function authenticateUser():
 }
 
 async function fetchAllActivityData(userId: string) {
-  return Promise.allSettled([
-    supabase
-      .from("minutes")
-      .select("id, title, created_at, updated_at")
-      .eq("user_id", userId)
-      .order("updated_at", { ascending: false }),
-    supabase
-      .from("recordings")
-      .select("id, title, created_at, transcribed")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("transcription_jobs")
-      .select("id, file_name, status, created_at")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("exports")
-      .select("id, title, format, created_at")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false }),
-  ]);
+  try {
+    return await Promise.allSettled([
+      supabase
+        .from("minutes")
+        .select("id, title, created_at, updated_at")
+        .eq("user_id", userId)
+        .order("updated_at", { ascending: false }),
+      supabase
+        .from("recordings")
+        .select("id, title, created_at, transcribed")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("transcription_jobs")
+        .select("id, file_name, status, created_at")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("exports")
+        .select("id, title, format, created_at")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false }),
+    ]);
+  } catch (err) {
+    throw new Error(
+      `アクティビティデータの並列取得に失敗しました: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
 }
 
 function buildMinuteActivities(
@@ -232,8 +238,14 @@ export async function getAllActivities(): Promise<{
     );
 
     return { data: activities, error: null };
-  } catch (e) {
-    return { data: null, error: e };
+  } catch (err) {
+    const error =
+      err instanceof Error
+        ? err
+        : new Error(
+            `アクティビティ一覧の取得中に予期しないエラーが発生しました: ${String(err)}`,
+          );
+    return { data: null, error };
   }
 }
 
