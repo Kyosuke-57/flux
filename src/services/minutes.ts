@@ -1,13 +1,26 @@
 import { supabase, requireUser } from "../lib/supabase";
-import type { PostgrestError } from "@supabase/supabase-js";
+import { PostgrestError } from "@supabase/supabase-js";
 import type { Minute } from "../types";
+
+/**
+ * Convert a generic Error to a PostgrestError for consistent return types.
+ */
+function toPostgrestError(err: Error | null, fallbackMessage: string): PostgrestError | null {
+  if (!err) return null;
+  return new PostgrestError({
+    message: err.message ?? fallbackMessage,
+    details: "",
+    hint: "",
+    code: "AUTH_ERROR",
+  });
+}
 
 /**
  * Fetch all minutes for the current user, ordered by updated_at descending.
  */
 export async function getAllMinutes(): Promise<{ data: Minute[] | null; error: PostgrestError | null }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError as unknown as PostgrestError | null };
+  if (authError || !user) return { data: null, error: toPostgrestError(authError, "Not authenticated") };
 
   const { data, error } = await supabase
     .from("minutes")
@@ -25,7 +38,7 @@ export async function getMinute(
   id: string
 ): Promise<{ data: Minute | null; error: PostgrestError | null }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError as unknown as PostgrestError | null };
+  if (authError || !user) return { data: null, error: toPostgrestError(authError, "Not authenticated") };
 
   const { data, error } = await supabase
     .from("minutes")
@@ -56,7 +69,7 @@ export async function createMinute(
   recording_path?: string,
 ): Promise<{ data: Minute | null; error: PostgrestError | null }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError as unknown as PostgrestError | null };
+  if (authError || !user) return { data: null, error: toPostgrestError(authError, "Not authenticated") };
 
   const { data, error } = await supabase
     .from("minutes")
@@ -85,7 +98,15 @@ export async function duplicateMinute(
 ): Promise<{ data: Minute | null; error: PostgrestError | null }> {
   const { data: original, error: fetchError } = await getMinute(id);
   if (fetchError || !original) {
-    return { data: null, error: (fetchError ?? new Error("Minute not found")) as unknown as PostgrestError | null };
+    return {
+      data: null,
+      error: fetchError ?? new PostgrestError({
+        message: "Minute not found",
+        details: "",
+        hint: "",
+        code: "NOT_FOUND",
+      }),
+    };
   }
 
   return createMinute(
@@ -110,7 +131,7 @@ export async function updateMinute(
   updates: Partial<Pick<Minute, "title" | "content" | "tags" | "template_id" | "folder_id" | "original_transcript" | "corrected_transcript" | "recording_path">>
 ): Promise<{ data: Minute | null; error: PostgrestError | null }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError as unknown as PostgrestError | null };
+  if (authError || !user) return { data: null, error: toPostgrestError(authError, "Not authenticated") };
 
   const { data, error } = await supabase
     .from("minutes")
@@ -130,7 +151,7 @@ export async function deleteMinute(
   id: string
 ): Promise<{ data: Minute | null; error: PostgrestError | null }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError as unknown as PostgrestError | null };
+  if (authError || !user) return { data: null, error: toPostgrestError(authError, "Not authenticated") };
 
   const { data, error } = await supabase
     .from("minutes")
@@ -151,7 +172,7 @@ export async function searchMinutes(
   query: string
 ): Promise<{ data: Minute[] | null; error: PostgrestError | null }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError as unknown as PostgrestError | null };
+  if (authError || !user) return { data: null, error: toPostgrestError(authError, "Not authenticated") };
 
   const { data, error } = await supabase
     .from("minutes")
