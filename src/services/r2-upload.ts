@@ -17,6 +17,7 @@ export interface UploadResult {
   r2Key: string;
 }
 
+/** Supabase セッションからアクセストークンを取得 */
 async function getAccessToken(): Promise<string> {
   const {
     data: { session },
@@ -28,29 +29,24 @@ async function getAccessToken(): Promise<string> {
   return token;
 }
 
-async function requestUploadUrl(
-  params: { filename: string; mimeType: string; fileSize: number },
-  token: string,
-): Promise<{ uploadUrl: string; r2Key: string }> {
-  const urlRes = await fetch(`${API_BASE_URL}/api/flux-upload-url`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      filename: params.filename,
-      mimeType: params.mimeType,
-      fileSize: params.fileSize,
-    }),
-  });
+/** API 呼び出し用の共通認証ヘッダーを生成 */
+function buildAuthHeaders(token: string): Record<string, string> {
+  return {
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+  };
+}
 
-  if (!urlRes.ok) {
-    const err = await urlRes.text().catch(() => "");
-    throw new Error(`アップロードURLの取得に失敗しました: ${urlRes.status} ${err}`);
+/** 署名付きURL取得APIのレスポンスを検証してパース */
+async function parseUploadUrlResponse(
+  response: Response,
+): Promise<{ uploadUrl: string; r2Key: string }> {
+  if (!response.ok) {
+    const err = await response.text().catch(() => "");
+    throw new Error(`アップロードURLの取得に失敗しました: ${response.status} ${err}`);
   }
 
-  const { uploadUrl, r2Key } = await urlRes.json();
+  const { uploadUrl, r2Key } = await response.json();
   if (!uploadUrl || !r2Key) {
     throw new Error("アップロードURLのレスポンスが不正です");
   }
@@ -58,15 +54,31 @@ async function requestUploadUrl(
   return { uploadUrl, r2Key };
 }
 
-function uploadWithXhr(
-  uploadUrl: string,
-  r2Key: string,
-  params: { uri: string; mimeType: string; filename: string },
-  onProgress?: (progress: number) => void,
-): Promise<UploadResult> {
-  return new Promise<UploadResult>((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
+/** API サーバーに署名付きアップロードURLを要求 */
+async function requestUploadUrl(
+  params: { filename: string; mimeType: string; fileSize: number },
+  token: string,
+): Promise<{ uploadUrl: string; r2Key: string }> {
+  const response = await fetch(`${API_BASE_URL}/api/flux-upload-url`, {
+    method: "POST",
+    headers: buildAuthHeaders(token),
+    body: JSON.stringify({
+      filename: params.filename,
+      mimeType: params.mimeType,
+      fileSize: params.fileSize,
+    }),
+  });
+  return parseUploadUrlResponse(response);
+}
 
+/** XHR のイベントハンドラを設定し、完了を Promise で返す */
+function createUploadXhr(
+  r2Key: string,
+  onProgress?: (progress: number) => void,
+): { xhr: XMLHttpRequest; onComplete: Promise<UploadResult> } {
+  const xhr = new XMLHttpRequest();
+
+  const onComplete = new Promise<UploadResult>((resolve, reject) => {
     xhr.upload.onprogress = (e: ProgressEvent) => {
       if (onProgress && e.lengthComputable) {
         const pct = Math.round((e.loaded / e.total) * 100);
@@ -86,11 +98,23 @@ function uploadWithXhr(
 
     xhr.onerror = () => reject(new Error("ネットワークエラーが発生しました"));
     xhr.ontimeout = () => reject(new Error("アップロードがタイムアウトしました"));
-
-    xhr.open("PUT", uploadUrl);
-    xhr.setRequestHeader("Content-Type", params.mimeType);
-    xhr.send({ uri: params.uri, type: params.mimeType, name: params.filename });
   });
+
+  return { xhr, onComplete };
+}
+
+/** XHR を使って R2 に直接ファイルを PUT する */
+function uploadWithXhr(
+  uploadUrl: string,
+  r2Key: string,
+  params: { uri: string; mimeType: string; filename: string },
+  onProgress?: (progress: number) => void,
+): Promise<UploadResult> {
+  const { xhr, onComplete } = createUploadXhr(r2Key, onProgress);
+  xhr.open("PUT", uploadUrl);
+  xhr.setRequestHeader("Content-Type", params.mimeType);
+  xhr.send({ uri: params.uri, type: params.mimeType, name: params.filename });
+  return onComplete;
 }
 
 /**
