@@ -189,14 +189,28 @@ def get_failure_patterns() -> list:
 # ── Queue ───────────────────────────────────────────────────
 def load_queue() -> dict:
     if TASKS_FILE.exists():
-        return json.loads(TASKS_FILE.read_text(encoding="utf-8"))
+        try:
+            return json.loads(TASKS_FILE.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, Exception):
+            # Fallback: backup があればそこから読み込む
+            backup = TASKS_FILE.with_suffix(".bak")
+            if backup.exists():
+                try:
+                    return json.loads(backup.read_text(encoding="utf-8"))
+                except (json.JSONDecodeError, Exception):
+                    pass
+            # どちらもダメなら初期化（空キュー）
+            return {"tasks": [], "$meta": {}}
     return {"tasks": [], "$meta": {}}
 
 
 def save_queue(queue: dict):
-    TASKS_FILE.write_text(
+    """Atomic write — 一時ファイルに書き込んでから rename して破損を防ぐ"""
+    tmp = TASKS_FILE.with_suffix(".tmp")
+    tmp.write_text(
         json.dumps(queue, ensure_ascii=False, indent=2), encoding="utf-8"
     )
+    tmp.replace(TASKS_FILE)  # 同一ファイルシステム上でアトミックに置き換え
 
 
 def get_next_pending(queue: dict) -> dict | None:

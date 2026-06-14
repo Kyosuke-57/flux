@@ -115,6 +115,36 @@ function handleRecordChange(
 }
 
 /**
+ * Realtime チャンネル名を生成する
+ */
+function getChannelName(jobId: string): string {
+  return `transcription-job-${jobId}`;
+}
+
+/**
+ * Realtime 購読ステータスを処理する
+ */
+function handleRealtimeStatus(
+  status: string,
+  onError?: (error: string) => void,
+): void {
+  if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+    onError?.(`Realtime 接続エラー: ${status}`);
+  }
+}
+
+/**
+ * チャンネル購読解除関数を生成する
+ */
+function createUnsubscriber(
+  channel: ReturnType<typeof supabase.channel>,
+): () => void {
+  return () => {
+    channel.unsubscribe();
+  };
+}
+
+/**
  * 文字起こしジョブの進捗を Supabase Realtime で購読する
  *
  * @returns unsubscribe 関数
@@ -125,7 +155,7 @@ export function subscribeToTranscription(
   onError?: (error: string) => void,
 ): () => void {
   const channel = supabase
-    .channel(`transcription-job-${jobId}`)
+    .channel(getChannelName(jobId))
     .on(
       "postgres_changes",
       {
@@ -139,14 +169,10 @@ export function subscribeToTranscription(
       },
     )
     .subscribe((status) => {
-      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-        onError?.(`Realtime 接続エラー: ${status}`);
-      }
+      handleRealtimeStatus(status, onError);
     });
 
-  return () => {
-    channel.unsubscribe();
-  };
+  return createUnsubscriber(channel);
 }
 
 /**
