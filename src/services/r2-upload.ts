@@ -17,23 +17,7 @@ export interface UploadResult {
   r2Key: string;
 }
 
-/**
- * R2 に音声ファイルをアップロード（署名付きURL方式）
- *
- * 1. API から署名付きアップロードURLを取得
- * 2. そのURLにファイルを直接 PUT
- *
- * @param onProgress 0-100 の進捗率を受け取るコールバック
- */
-export async function uploadToR2(
-  params: {
-    uri: string;
-    filename: string;
-    mimeType: string;
-    fileSize: number;
-  },
-  onProgress?: (progress: number) => void,
-): Promise<UploadResult> {
+async function getAccessToken(): Promise<string> {
   const {
     data: { session },
   } = await supabase.auth.getSession();
@@ -41,8 +25,13 @@ export async function uploadToR2(
   if (!token) {
     throw new Error("認証されていません。ログインしてください。");
   }
+  return token;
+}
 
-  // 1. 署名付きアップロードURLを要求
+async function requestUploadUrl(
+  params: { filename: string; mimeType: string; fileSize: number },
+  token: string,
+): Promise<{ uploadUrl: string; r2Key: string }> {
   const urlRes = await fetch(`${API_BASE_URL}/api/flux-upload-url`, {
     method: "POST",
     headers: {
@@ -66,8 +55,16 @@ export async function uploadToR2(
     throw new Error("アップロードURLのレスポンスが不正です");
   }
 
-  // 2. 署名付きURLにファイルを直接PUT
-  const result = await new Promise<UploadResult>((resolve, reject) => {
+  return { uploadUrl, r2Key };
+}
+
+function uploadWithXhr(
+  uploadUrl: string,
+  r2Key: string,
+  params: { uri: string; mimeType: string; filename: string },
+  onProgress?: (progress: number) => void,
+): Promise<UploadResult> {
+  return new Promise<UploadResult>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
 
     xhr.upload.onprogress = (e: ProgressEvent) => {
@@ -94,6 +91,26 @@ export async function uploadToR2(
     xhr.setRequestHeader("Content-Type", params.mimeType);
     xhr.send({ uri: params.uri, type: params.mimeType, name: params.filename });
   });
+}
 
-  return result;
+/**
+ * R2 に音声ファイルをアップロード（署名付きURL方式）
+ *
+ * 1. API から署名付きアップロードURLを取得
+ * 2. そのURLにファイルを直接 PUT
+ *
+ * @param onProgress 0-100 の進捗率を受け取るコールバック
+ */
+export async function uploadToR2(
+  params: {
+    uri: string;
+    filename: string;
+    mimeType: string;
+    fileSize: number;
+  },
+  onProgress?: (progress: number) => void,
+): Promise<UploadResult> {
+  const token = await getAccessToken();
+  const { uploadUrl, r2Key } = await requestUploadUrl(params, token);
+  return uploadWithXhr(uploadUrl, r2Key, params, onProgress);
 }
