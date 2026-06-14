@@ -54,9 +54,10 @@ beforeEach(() => {
 // ---------------------------------------------------------------------------
 describe("getAllTags", () => {
   it("認証済みユーザーのタグ一覧をアルファベット順で返す", async () => {
+    const now = new Date().toISOString();
     const tags: Tag[] = [
-      { id: "1", user_id: TEST_USER.id, name: "important", color: "#ff0000" },
-      { id: "2", user_id: TEST_USER.id, name: "meeting" },
+      { id: "1", user_id: TEST_USER.id, name: "important", color: "#ff0000", status: "active", created_at: now },
+      { id: "2", user_id: TEST_USER.id, name: "meeting", status: "active", created_at: now },
     ];
 
     vi.mocked(supabase.auth.getUser).mockResolvedValue({
@@ -143,6 +144,8 @@ describe("createTag", () => {
     user_id: TEST_USER.id,
     name: "bug",
     color: "#ff0000",
+    status: "active",
+    created_at: new Date().toISOString(),
   };
 
   it("名前のみでタグを作成する", async () => {
@@ -151,7 +154,7 @@ describe("createTag", () => {
       error: null,
     } as any);
 
-    const tagNoColor: Tag = { id: "new-1", user_id: TEST_USER.id, name: "bug" };
+    const tagNoColor: Tag = { id: "new-1", user_id: TEST_USER.id, name: "bug", status: "active", created_at: new Date().toISOString() };
     const builder = createQueryBuilder();
     vi.mocked(supabase.from).mockReturnValue(builder);
     builder.then.mockImplementation((resolve: any) =>
@@ -220,6 +223,8 @@ describe("updateTag", () => {
     user_id: TEST_USER.id,
     name: "critical",
     color: "#ff0000",
+    status: "active",
+    created_at: new Date().toISOString(),
   };
 
   it("名前を更新する", async () => {
