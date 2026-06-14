@@ -62,7 +62,7 @@ vi.mock("../../../../src/services/history", () => ({
   getAllActivities: (...args: any[]) => mockGetAllActivities(...args),
   filterActivities: (...args: any[]) => mockFilterActivities(...args),
   sortActivities: (...args: any[]) => mockSortActivities(...args),
-  getActivityLabel: vi.fn((t: string) => ({ minute_created: "議事録を作成", minute_edited: "議事録を編集", recording_uploaded: "録音をアップロード", transcription_job: "文字起こし", exported: "エクスポート" })[t] ?? t),
+  getActivityLabel: vi.fn((t: string) => ({ minute_created: "議事録を作成", minute_edited: "議事録を編集", recording_uploaded: "録音をアップロード", transcription_job: "文字起こし", exported: "エクスポート" } as Record<string, string>)[t] ?? t),
   getActivityStatusLabel: vi.fn((s: string) => ({ completed: "完了", processing: "処理中", queued: "処理中", failed: "エラー", transcribed: "文字起こし済", pending: "未処理" })[s ?? ""] ?? s ?? ""),
 }));
 
