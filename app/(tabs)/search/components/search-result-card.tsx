@@ -54,14 +54,14 @@ export function SearchResultCard({ item, search, onPress, color }: Props) {
         <HighlightedText
           text={item.title}
           highlight={search}
-          style={[styles.title, { color: color.textPrimary }]}
+          style={{ ...styles.title, color: color.textPrimary }}
         />
 
         {/* サブタイトル / プレビュー */}
         <HighlightedText
           text={item.subtitle}
           highlight={search}
-          style={[styles.subtitle, { color: color.textSecondary }]}
+          style={{ ...styles.subtitle, color: color.textSecondary }}
           numberOfLines={2}
         />
       </GlassCard>
