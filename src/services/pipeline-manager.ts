@@ -5,6 +5,7 @@ import {
   subscribeToTranscription,
 } from "./transcription";
 import type { TranscriptionProgress } from "./transcription";
+import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import type { TranscriptionJob } from "../types";
 
 type TranscriptionJobRow = TranscriptionJob & {
@@ -211,7 +212,7 @@ export function subscribeToPipeline(
         table: "transcription_jobs",
         filter: `minute_id=eq.${minuteId}`,
       },
-      (payload) => {
+      (payload: RealtimePostgresChangesPayload<TranscriptionJobRow>) => {
         const record = payload.new as TranscriptionJobRow;
 
         const progress: TranscriptionProgress = {
