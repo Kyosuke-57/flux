@@ -1,8 +1,8 @@
 import React from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { GlassCard } from "../../../src/components/Glass";
-import { theme } from "../../../src/theme";
+import { GlassCard } from "../../../../src/components/Glass";
+import { theme } from "../../../../src/theme";
 
 type IoniconName = React.ComponentProps<typeof Ionicons>["name"];
 
