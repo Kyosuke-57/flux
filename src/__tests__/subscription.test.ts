@@ -16,7 +16,7 @@ const { mockRequireUser, mockSupabase, mockPlatform, createQB } = vi.hoisted(() 
     qb.single = vi.fn().mockResolvedValue({ data: null, error: null });
     qb.maybeSingle = vi.fn().mockResolvedValue({ data: null, error: null });
     // Thenable — for queries that end with a filter (no .single())
-    qb.then = (onfulfilled: Function) =>
+    qb.then = (onfulfilled: (value: any) => any) =>
       Promise.resolve(qb._resolveData).then(onfulfilled);
     return qb;
   };
