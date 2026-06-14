@@ -68,6 +68,116 @@ export function getActivityStatusLabel(status: string | undefined): string {
   }
 }
 
+// ─── プライベートヘルパー ─────────────────────────────────
+
+async function authenticateUser():
+  | { user: { id: string } }
+  | { error: PostgrestError | Error | null } {
+  const { user, error: authError } = await requireUser();
+  if (authError || !user)
+    return { error: authError as unknown as PostgrestError | Error | null };
+  return { user };
+}
+
+async function fetchAllActivityData(userId: string) {
+  return Promise.allSettled([
+    supabase
+      .from("minutes")
+      .select("id, title, created_at, updated_at")
+      .eq("user_id", userId)
+      .order("updated_at", { ascending: false }),
+    supabase
+      .from("recordings")
+      .select("id, title, created_at, transcribed")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("transcription_jobs")
+      .select("id, file_name, status, created_at")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("exports")
+      .select("id, title, format, created_at")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false }),
+  ]);
+}
+
+function buildMinuteActivities(
+  minutes: Pick<Minute, "id" | "title" | "created_at" | "updated_at">[],
+): ActivityItem[] {
+  const activities: ActivityItem[] = [];
+  for (const m of minutes) {
+    activities.push({
+      id: `minute-created-${m.id}`,
+      type: "minute_created",
+      title: m.title,
+      description: "議事録を作成しました",
+      timestamp: m.created_at,
+      targetId: m.id,
+      targetRoute: `/minute/${m.id}`,
+    });
+    // updated_at が created_at と異なる場合 → 編集イベントとして追加
+    if (m.updated_at && m.created_at && m.updated_at !== m.created_at) {
+      activities.push({
+        id: `minute-edited-${m.id}`,
+        type: "minute_edited",
+        title: m.title,
+        description: "議事録を編集しました",
+        timestamp: m.updated_at,
+        targetId: m.id,
+        targetRoute: `/minute/${m.id}`,
+      });
+    }
+  }
+  return activities;
+}
+
+function buildRecordingActivities(
+  recordings: Pick<Recording, "id" | "title" | "created_at" | "transcribed">[],
+): ActivityItem[] {
+  return recordings.map((r) => ({
+    id: `recording-${r.id}`,
+    type: "recording_uploaded",
+    title: r.title,
+    description: "録音をアップロードしました",
+    timestamp: r.created_at,
+    status: r.transcribed ? "transcribed" : "pending",
+    targetId: r.id,
+    targetRoute: `/recording/${r.id}`,
+  }));
+}
+
+function buildTranscriptionActivities(
+  jobs: Pick<TranscriptionJob, "id" | "file_name" | "status" | "created_at">[],
+): ActivityItem[] {
+  return jobs.map((j) => ({
+    id: `transcription-${j.id}`,
+    type: "transcription_job",
+    title: j.file_name,
+    description: "文字起こしジョブ",
+    timestamp: j.created_at,
+    status: j.status,
+    targetId: j.id,
+    targetRoute: "/(tabs)/transcription-jobs",
+  }));
+}
+
+function buildExportActivities(
+  exports: Pick<ExportItem, "id" | "title" | "format" | "created_at">[],
+): ActivityItem[] {
+  return exports.map((e) => ({
+    id: `export-${e.id}`,
+    type: "exported",
+    title: e.title,
+    description: `${e.format.toUpperCase()} 形式でエクスポート`,
+    timestamp: e.created_at,
+    targetId: e.id,
+    targetRoute: "/(tabs)/exports",
+  }));
+}
+
 // ─── メインサービス ───────────────────────────────────────
 
 /**
@@ -86,107 +196,34 @@ export async function getAllActivities(): Promise<{
   data: null;
   error: PostgrestError | Error | null;
 }> {
-  const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError as unknown as PostgrestError | Error | null };
+  const authResult = await authenticateUser();
+  if ("error" in authResult) return { data: null, error: authResult.error };
 
   try {
-    const [minutesRes, recordingsRes, jobsRes, exportsRes] = await Promise.allSettled([
-      supabase
-        .from("minutes")
-        .select("id, title, created_at, updated_at")
-        .eq("user_id", user.id)
-        .order("updated_at", { ascending: false }),
-      supabase
-        .from("recordings")
-        .select("id, title, created_at, transcribed")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("transcription_jobs")
-        .select("id, file_name, status, created_at")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("exports")
-        .select("id, title, format, created_at")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false }),
-    ]);
+    const [minutesRes, recordingsRes, jobsRes, exportsRes] =
+      await fetchAllActivityData(authResult.user.id);
 
     const activities: ActivityItem[] = [];
 
-    // minutes → minute_created / minute_edited
     if (minutesRes.status === "fulfilled" && minutesRes.value.data) {
-      for (const m of minutesRes.value.data as Pick<Minute, "id" | "title" | "created_at" | "updated_at">[]) {
-        activities.push({
-          id: `minute-created-${m.id}`,
-          type: "minute_created",
-          title: m.title,
-          description: "議事録を作成しました",
-          timestamp: m.created_at,
-          targetId: m.id,
-          targetRoute: `/minute/${m.id}`,
-        });
-        // updated_at が created_at と異なる場合 → 編集イベントとして追加
-        if (m.updated_at && m.created_at && m.updated_at !== m.created_at) {
-          activities.push({
-            id: `minute-edited-${m.id}`,
-            type: "minute_edited",
-            title: m.title,
-            description: "議事録を編集しました",
-            timestamp: m.updated_at,
-            targetId: m.id,
-            targetRoute: `/minute/${m.id}`,
-          });
-        }
-      }
+      activities.push(
+        ...buildMinuteActivities(minutesRes.value.data),
+      );
     }
-
-    // recordings → recording_uploaded
     if (recordingsRes.status === "fulfilled" && recordingsRes.value.data) {
-      for (const r of recordingsRes.value.data as Pick<Recording, "id" | "title" | "created_at" | "transcribed">[]) {
-        activities.push({
-          id: `recording-${r.id}`,
-          type: "recording_uploaded",
-          title: r.title,
-          description: "録音をアップロードしました",
-          timestamp: r.created_at,
-          status: r.transcribed ? "transcribed" : "pending",
-          targetId: r.id,
-          targetRoute: `/recording/${r.id}`,
-        });
-      }
+      activities.push(
+        ...buildRecordingActivities(recordingsRes.value.data),
+      );
     }
-
-    // transcription_jobs → transcription_job
     if (jobsRes.status === "fulfilled" && jobsRes.value.data) {
-      for (const j of jobsRes.value.data as Pick<TranscriptionJob, "id" | "file_name" | "status" | "created_at">[]) {
-        activities.push({
-          id: `transcription-${j.id}`,
-          type: "transcription_job",
-          title: j.file_name,
-          description: "文字起こしジョブ",
-          timestamp: j.created_at,
-          status: j.status,
-          targetId: j.id,
-          targetRoute: "/(tabs)/transcription-jobs",
-        });
-      }
+      activities.push(
+        ...buildTranscriptionActivities(jobsRes.value.data),
+      );
     }
-
-    // exports → exported
     if (exportsRes.status === "fulfilled" && exportsRes.value.data) {
-      for (const e of exportsRes.value.data as Pick<ExportItem, "id" | "title" | "format" | "created_at">[]) {
-        activities.push({
-          id: `export-${e.id}`,
-          type: "exported",
-          title: e.title,
-          description: `${e.format.toUpperCase()} 形式でエクスポート`,
-          timestamp: e.created_at,
-          targetId: e.id,
-          targetRoute: "/(tabs)/exports",
-        });
-      }
+      activities.push(
+        ...buildExportActivities(exportsRes.value.data),
+      );
     }
 
     // 日付降順でソート
