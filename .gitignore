@@ -50,3 +50,4 @@ apps/otoroku-api/.next/
 .omo/
 .playwright-mcp/
 .devloop/
+!.devloop/flux-dev-loop.py
