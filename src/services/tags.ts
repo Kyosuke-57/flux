@@ -73,14 +73,21 @@ export async function updateTag(
  * @param id Tag ID
  */
 export async function deleteTag(id: string) {
-  const { user, error: authError } = await requireUser();
-  if (authError || !user) return { error: authError };
+  try {
+    const { user, error: authError } = await requireUser();
+    if (authError || !user) return { error: authError };
 
-  const { error } = await supabase
-    .from("tags")
-    .delete()
-    .eq("id", id)
-    .eq("user_id", user.id);
+    const { error } = await supabase
+      .from("tags")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", user.id);
 
-  return { error };
+    if (error) return { error };
+    return { error: null };
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "予期しないエラーが発生しました";
+    return { error: new Error(`タグの削除に失敗しました: ${message}`) };
+  }
 }
