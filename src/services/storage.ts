@@ -66,7 +66,10 @@ export async function uploadAudio(
 
     return { path: data.path, error: null };
   } catch (err) {
-    return { path: null, error: err };
+    return {
+      path: null,
+      error: err instanceof Error ? err : new Error(String(err)),
+    };
   }
 }
 
@@ -89,7 +92,7 @@ export function getAudioUrl(path: string): string {
  */
 export async function deleteAudio(
   path: string,
-): Promise<{ error: StorageApiError | null }> {
+): Promise<{ error: StorageApiError | Error | null }> {
   const { error } = await supabase.storage.from(BUCKET).remove([path]);
   return { error };
 }
