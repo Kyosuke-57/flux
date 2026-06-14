@@ -87,6 +87,8 @@ const activities = [
 describe("HistoryScreen", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Date のみ fake し、setTimeout などは real に保つ（React 19 のスケジューラに必要）
+    vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(NOW);
 
     mockUseAuth.mockReturnValue({ user: { id: "u1" }, isLoading: false });

@@ -669,13 +669,29 @@ def auto_generate(queue: dict) -> int:
                 content = f.read_text(encoding="utf-8", errors="ignore")
             except Exception:
                 continue
-            # Simple heuristic: find function definitions and estimate their length
+            # Measure actual function body using brace matching,
+            # not span to next function keyword (which includes unrelated helpers).
             func_starts = list(re.finditer(r"(?:export\s+)?(?:async\s+)?function\s+(\w+)", content))
-            for i, m in enumerate(func_starts):
+            for m in func_starts:
                 fn_name = m.group(1)
                 fn_start = m.start()
-                fn_end = func_starts[i + 1].start() if i + 1 < len(func_starts) else len(content)
-                fn_lines = content[fn_start:fn_end].count("\n")
+                # Locate the opening brace of the function body
+                brace_start = content.find("{", m.end())
+                if brace_start == -1:
+                    continue
+                # Match braces to find the actual closing brace
+                depth = 1
+                pos = brace_start + 1
+                while depth > 0 and pos < len(content):
+                    c = content[pos]
+                    if c == "{":
+                        depth += 1
+                    elif c == "}":
+                        depth -= 1
+                    pos += 1
+                if depth != 0:
+                    continue  # Unbalanced braces, skip
+                fn_lines = content[fn_start:pos].count("\n")
                 if fn_lines > 60:
                     add_if_new(
                         f"refactor-{f.stem}-{fn_name}-split",
@@ -811,6 +827,16 @@ def run_one_cycle() -> str:
             next_msg = f" ⏩ 次は{next_task['label'].split(':')[-1].strip()}" if next_task else ""
             user_msg(f"✅ {label}できたよ！（{r['elapsed']:.0f}s / {tp['tests']}tests）{next_msg}")
             return f"DONE ({r['elapsed']:.1f}s, {tp['tests']} tests): {task['label']}"
+        elif not changes and tests_ok and tests_ran:
+            # No changes needed — task already resolved (e.g. function already refactored)
+            log(f"ALREADY DONE: no changes needed, {tp['tests']} tests pass")
+            mark_task(task, "completed")
+            save_queue(queue)
+            next_q = load_queue()
+            next_task = get_next_pending(next_q)
+            next_msg = f" ⏩ 次は{next_task['label'].split(':')[-1].strip()}" if next_task else ""
+            user_msg(f"✅ {label}はもう解決済みだったよ！（{tp['tests']} tests）{next_msg}")
+            return f"ALREADY_DONE: {task['label']}"
         elif changes and tests_ok and not tests_ran:
             log("Changes made but 0 tests ran — treating as failure", "WARN")
             record_failure(task["id"], "test_failure",
