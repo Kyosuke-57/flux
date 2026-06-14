@@ -6,16 +6,23 @@ import type { Tag } from "../types";
  * Returns tags sorted alphabetically by name.
  */
 export async function getAllTags() {
-  const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError };
+  try {
+    const { user, error: authError } = await requireUser();
+    if (authError || !user) return { data: null, error: authError };
 
-  const { data, error } = await supabase
-    .from("tags")
-    .select("*")
-    .eq("user_id", user.id)
-    .order("name");
+    const { data, error } = await supabase
+      .from("tags")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("name");
 
-  return { data: data as Tag[] | null, error };
+    if (error) return { data: null, error };
+    return { data: data as Tag[] | null, error: null };
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "予期しないエラーが発生しました";
+    return { data: null, error: new Error(`タグの取得に失敗しました: ${message}`) };
+  }
 }
 
 /**
@@ -24,16 +31,23 @@ export async function getAllTags() {
  * @param color Optional hex colour string (e.g. "#ff0000")
  */
 export async function createTag(name: string, color?: string) {
-  const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError };
+  try {
+    const { user, error: authError } = await requireUser();
+    if (authError || !user) return { data: null, error: authError };
 
-  const { data, error } = await supabase
-    .from("tags")
-    .insert({ name, color, user_id: user.id })
-    .select()
-    .single();
+    const { data, error } = await supabase
+      .from("tags")
+      .insert({ name, color, user_id: user.id })
+      .select()
+      .single();
 
-  return { data: data as Tag | null, error };
+    if (error) return { data: null, error };
+    return { data: data as Tag | null, error: null };
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "予期しないエラーが発生しました";
+    return { data: null, error: new Error(`タグの作成に失敗しました: ${message}`) };
+  }
 }
 
 /**

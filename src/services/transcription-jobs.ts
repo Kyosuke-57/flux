@@ -118,18 +118,28 @@ export async function updateTranscriptionJob(
     >
   >,
 ) {
-  const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError };
+  try {
+    const { user, error: authError } = await requireUser();
+    if (authError || !user) return { data: null, error: authError };
 
-  const { data, error } = await supabase
-    .from("transcription_jobs")
-    .update(updates)
-    .eq("id", id)
-    .eq("user_id", user.id)
-    .select()
-    .single();
+    const { data, error } = await supabase
+      .from("transcription_jobs")
+      .update(updates)
+      .eq("id", id)
+      .eq("user_id", user.id)
+      .select()
+      .single();
 
-  return { data: data as TranscriptionJob | null, error };
+    return { data: data as TranscriptionJob | null, error };
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "不明なエラーが発生しました";
+    console.error("[updateTranscriptionJob]", message);
+    return {
+      data: null,
+      error: { message, details: "", hint: "", code: "UNEXPECTED" } as PostgrestError,
+    };
+  }
 }
 
 /**
@@ -155,14 +165,23 @@ export async function searchTranscriptionJobs(
  * 文字起こしジョブを削除
  */
 export async function deleteTranscriptionJob(id: string) {
-  const { user, error: authError } = await requireUser();
-  if (authError || !user) return { error: authError };
+  try {
+    const { user, error: authError } = await requireUser();
+    if (authError || !user) return { error: authError };
 
-  const { error } = await supabase
-    .from("transcription_jobs")
-    .delete()
-    .eq("id", id)
-    .eq("user_id", user.id);
+    const { error } = await supabase
+      .from("transcription_jobs")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", user.id);
 
-  return { error };
+    return { error };
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "不明なエラーが発生しました";
+    console.error("[deleteTranscriptionJob]", message);
+    return {
+      error: { message, details: "", hint: "", code: "UNEXPECTED" } as PostgrestError,
+    };
+  }
 }
