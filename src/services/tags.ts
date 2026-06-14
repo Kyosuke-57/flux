@@ -46,18 +46,25 @@ export async function updateTag(
   id: string,
   updates: Partial<Pick<Tag, "name" | "color">>,
 ) {
-  const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError };
+  try {
+    const { user, error: authError } = await requireUser();
+    if (authError || !user) return { data: null, error: authError };
 
-  const { data, error } = await supabase
-    .from("tags")
-    .update(updates)
-    .eq("id", id)
-    .eq("user_id", user.id)
-    .select()
-    .single();
+    const { data, error } = await supabase
+      .from("tags")
+      .update(updates)
+      .eq("id", id)
+      .eq("user_id", user.id)
+      .select()
+      .single();
 
-  return { data: data as Tag | null, error };
+    if (error) return { data: null, error };
+    return { data: data as Tag | null, error: null };
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "予期しないエラーが発生しました";
+    return { data: null, error: new Error(`タグの更新に失敗しました: ${message}`) };
+  }
 }
 
 /**
