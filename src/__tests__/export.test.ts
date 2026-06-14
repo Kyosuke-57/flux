@@ -190,7 +190,7 @@ describe("exportMinuteToFile", () => {
     const minute = { ...sampleMinute, title: "a".repeat(100) };
     await exportMinuteToFile(minute, "txt");
 
-    const callArg = vi.mocked(File).mock.calls[0][1] as string;
+    const callArg = (File as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1] as string;
     const namePart = callArg.split("-")[0];
     expect(namePart.length).toBeLessThanOrEqual(60);
   });
