@@ -80,6 +80,41 @@ export async function startTranscription(params: {
 }
 
 /**
+ * DBのレコードから TranscriptionProgress オブジェクトを構築する
+ */
+function buildTranscriptionProgress(
+  record: TranscriptionJobRow,
+): TranscriptionProgress {
+  return {
+    status: record.status,
+    completedChunks: record.completed_chunks,
+    totalChunks: record.total_chunks,
+    progress: `${record.completed_chunks}/${record.total_chunks}`,
+    progressDetail: record.progress_detail || undefined,
+    minuteId: record.minute_id || undefined,
+    transcript: record.transcript || undefined,
+    errorMessage: record.error_message || undefined,
+  };
+}
+
+/**
+ * レコード変更を処理し、進捗コールバックを呼び出して完了/失敗時に購読解除する
+ */
+function handleRecordChange(
+  record: TranscriptionJobRow,
+  onProgress: ProgressCallback,
+  channel: ReturnType<typeof supabase.channel>,
+): void {
+  const progress = buildTranscriptionProgress(record);
+  onProgress(progress);
+
+  // 完了 or 失敗時は自動的に購読解除
+  if (record.status === "completed" || record.status === "failed") {
+    channel.unsubscribe();
+  }
+}
+
+/**
  * 文字起こしジョブの進捗を Supabase Realtime で購読する
  *
  * @returns unsubscribe 関数
@@ -100,23 +135,7 @@ export function subscribeToTranscription(
         filter: `id=eq.${jobId}`,
       },
       (payload: RealtimePostgresChangesPayload<TranscriptionJobRow>) => {
-        const record = payload.new as TranscriptionJobRow;
-        const progress: TranscriptionProgress = {
-          status: record.status,
-          completedChunks: record.completed_chunks,
-          totalChunks: record.total_chunks,
-          progress: `${record.completed_chunks}/${record.total_chunks}`,
-          progressDetail: record.progress_detail || undefined,
-          minuteId: record.minute_id || undefined,
-          transcript: record.transcript || undefined,
-          errorMessage: record.error_message || undefined,
-        };
-        onProgress(progress);
-
-        // 完了 or 失敗時は自動的に購読解除
-        if (record.status === "completed" || record.status === "failed") {
-          channel.unsubscribe();
-        }
+        handleRecordChange(payload.new as TranscriptionJobRow, onProgress, channel);
       },
     )
     .subscribe((status) => {
