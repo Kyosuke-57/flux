@@ -3,6 +3,7 @@ import {
   FlatList,
   RefreshControl,
   StyleSheet,
+  TouchableOpacity,
   View,
   Text,
   TextInput,
