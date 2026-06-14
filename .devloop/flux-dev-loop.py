@@ -288,7 +288,7 @@ def run_opencode(prompt: str) -> dict:
     try:
         r = subprocess.run(
             [OPENCODE_SHELL, "-c", f'exec "{OPENCODE_CMD}" run --attach "{OPENCODE_URL}" -m "{OPENCODE_MODEL}" < "{pf}"'],
-            capture_output=True, text=True, timeout=600,
+            capture_output=True, text=True, timeout=1200,
         )
         exit_code = r.returncode
         stdout = r.stdout
@@ -694,11 +694,36 @@ def parse_tests(out: str) -> dict:
     }
 
 
+def cleanup_logs():
+    """Keep log directory tidy — trim old run logs and loop.log."""
+    KEEP_RUN_LOGS = 20
+    LOOP_LOG_MAX_LINES = 200
+
+    # ── Run logs ──
+    run_logs = sorted(LOG_DIR.glob("run_*.log"), key=lambda p: p.stat().st_mtime, reverse=True)
+    for old in run_logs[KEEP_RUN_LOGS:]:
+        try:
+            old.unlink()
+        except OSError:
+            pass
+
+    # ── loop.log ──
+    lp = LOG_DIR / "loop.log"
+    if lp.exists():
+        try:
+            lines = lp.read_text(encoding="utf-8").splitlines()
+            if len(lines) > LOOP_LOG_MAX_LINES:
+                lp.write_text("\n".join(lines[-LOOP_LOG_MAX_LINES:]) + "\n", encoding="utf-8")
+        except OSError:
+            pass
+
+
 # ── Single cycle ────────────────────────────────────────────
 def run_one_cycle() -> str:
     """
     Run a single dev cycle. Returns a human-readable summary string.
     """
+    cleanup_logs()  # Tidy up logs at the start of each cycle
     try:
         # Crash recovery
         queue = load_queue()
