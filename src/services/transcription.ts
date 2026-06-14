@@ -190,7 +190,7 @@ export function subscribeToTranscription(
   const channel = supabase
     .channel(getChannelName(jobId))
     .on("postgres_changes", createRealtimeFilter(jobId), (payload) =>
-      onPostgresChange(payload, onProgress, channel),
+      onPostgresChange(payload as unknown as RealtimePostgresChangesPayload<TranscriptionJobRow>, onProgress, channel),
     )
     .subscribe((status) => onSubscribeStatus(status, onError));
 

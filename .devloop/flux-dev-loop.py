@@ -1,961 +1,648 @@
 #!/usr/bin/env python3
-"""
-Flux Dev Loop — single-cycle runner
-====================================
-Picks the next pending task → runs opencode → verifies tests → commits → reports.
+"""Flux Dev Loop: Autonomous development cycle for the meeting-minutes-app project.
 
-Designed to be called by a cron job. Each invocation is ONE cycle in a
-fresh session, so context limits never apply.
-
-Usage:
-  python .devloop/flux-dev-loop.py              # one cycle
-  python .devloop/flux-dev-loop.py --add-task <file>  # add task from prompt
-  python .devloop/flux-dev-loop.py --status     # show queue status
+Runs opencode in agentic mode to implement tasks from the project's task list,
+reports results, and updates the task tracking file.
+When no tasks are pending, auto-generates new tasks by scanning the project.
 """
 
-import json
-import os
 import subprocess
 import sys
-import datetime
+import os
+import json
+import time
+import random
 import re
-from collections import Counter
+import shutil
 from pathlib import Path
 
-# ── Config ──────────────────────────────────────────────────
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-TASKS_FILE = PROJECT_ROOT / ".devloop" / "tasks" / "queue.json"
-LOG_DIR = PROJECT_ROOT / ".devloop" / "logs"
-DATA_DIR = PROJECT_ROOT / ".devloop" / "data"
-FAILURE_DB = DATA_DIR / "failure_log.json"
-MAX_FAILURE_ENTRIES = 100
+PROJECT_DIR = Path(__file__).resolve().parent.parent
+
+# On Windows, subprocess.run(["opencode", ...]) fails to resolve .cmd files
+# because CreateProcess doesn't search PATHEXT the same way shutil.which does.
+# Resolve the full path once at module level.
+_OPENCODE_BIN = shutil.which("opencode")
+if _OPENCODE_BIN:
+    log_open = print  # temporary; real log() is defined below
+    log_open(f"[flux] opencode binary resolved: {_OPENCODE_BIN}")
+else:
+    log_open = print
+    log_open("[flux] WARNING: opencode not found in PATH")
+_NPX_BIN = shutil.which("npx") or shutil.which("npx.cmd")
+QUEUE_FILE = PROJECT_DIR / ".devloop" / "tasks" / "queue.json"
+STATE_FILE = PROJECT_DIR / ".devloop" / "state.json"
+LOCK_FILE = PROJECT_DIR / ".devloop" / "flux.lock"
+LOG_DIR = PROJECT_DIR / ".devloop" / "logs"
+DATA_DIR = PROJECT_DIR / ".devloop" / "data"
+
+OPENCODE_HOST = "127.0.0.1"
 OPENCODE_PORT = 8575
-OPENCODE_URL = f"http://localhost:{OPENCODE_PORT}"
-OPENCODE_MODEL = "opencode-go/deepseek-v4-flash"
-OPENCODE_CMD = r"C:\Users\きょ\AppData\Roaming\npm\opencode"
-OPENCODE_SHELL = r"C:\Program Files\Git\bin\bash.exe"
-COMMIT_PREFIX = "[dev-loop]"
 
-os.chdir(str(PROJECT_ROOT))
-LOG_DIR.mkdir(parents=True, exist_ok=True)
-DATA_DIR.mkdir(parents=True, exist_ok=True)
+os.chdir(str(PROJECT_DIR))
+os.environ["PYTHONUNBUFFERED"] = "1"
 
+# ---------------------------------------------------------------------------
+# Logging & locking
+# ---------------------------------------------------------------------------
 
-# ── Logging ─────────────────────────────────────────────────
-def log(msg: str, level: str = "INFO"):
-    """Write to loop.log for debugging (no stdout)."""
-    ts = datetime.datetime.now().strftime("%H:%M:%S")
-    with open(LOG_DIR / "loop.log", "a", encoding="utf-8") as f:
-        f.write(f"[{ts}][{level}] {msg}\n")
-
-def user_msg(msg: str):
-    """Print user-friendly message to stdout (delivered to Slack)."""
-    ts = datetime.datetime.now().strftime("%H:%M")
-    print(f"[{ts}] {msg}", flush=True)
-    with open(LOG_DIR / "loop.log", "a", encoding="utf-8") as f:
-        f.write(f"[USER] {msg}\n")
+def log(msg: str):
+    """Log a message prefixed with [flux]."""
+    print(f"[flux] {msg}")
 
 
-# ── Failure Database ────────────────────────────────────────
-def record_failure(task_id: str, error_type: str, summary: str):
-    """Record a failure event for pattern analysis."""
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    failures = {"entries": [], "counts": {}}
-    if FAILURE_DB.exists():
-        try:
-            failures = json.loads(FAILURE_DB.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, Exception):
-            failures = {"entries": [], "counts": {}}
-
-    # Ensure structure
-    if "entries" not in failures:
-        failures["entries"] = []
-    if "counts" not in failures:
-        failures["counts"] = {}
-
-    failures["entries"].append({
-        "ts": datetime.datetime.now().isoformat(),
-        "task_id": task_id,
-        "error_type": error_type,
-        "summary": summary[:300],
-    })
-
-    # Trim oldest entries
-    failures["entries"] = failures["entries"][-MAX_FAILURE_ENTRIES:]
-
-    # Update aggregate counts for last 24h
-    now = datetime.datetime.now()
-    cutoff = now - datetime.timedelta(hours=24)
-    fresh_counts = Counter()
-    for e in failures["entries"]:
-        try:
-            ets = datetime.datetime.fromisoformat(e["ts"])
-        except (ValueError, TypeError):
-            ets = now
-        if ets >= cutoff:
-            fresh_counts[e.get("error_type", "unknown")] += 1
-    failures["counts"] = dict(fresh_counts.most_common())
-    failures["last_updated"] = now.isoformat()
-
-    FAILURE_DB.write_text(
-        json.dumps(failures, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
-    log(f"FAILURE DB: [{error_type}] {summary[:80]}")
-
-
-def get_failure_patterns() -> list:
-    """Analyze failure DB and return actionable improvement suggestions."""
-    if not FAILURE_DB.exists():
-        return []
+def acquire_lock() -> bool:
+    """Acquire the flux lock file. Returns True if acquired, False if held by another process."""
     try:
-        failures = json.loads(FAILURE_DB.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, Exception):
-        return []
+        lock = open(LOCK_FILE, "x")
+        lock.write(str(os.getpid()))
+        lock.close()
+        return True
+    except FileExistsError:
+        age = time.time() - os.path.getmtime(LOCK_FILE)
+        if age > 3600:
+            log("Stale lock found (>{:.0f}s old), removing...".format(age))
+            LOCK_FILE.unlink(missing_ok=True)
+            return acquire_lock()
+        return False
 
-    entries = failures.get("entries", [])
-    now = datetime.datetime.now()
-    cutoff = now - datetime.timedelta(hours=24)
 
-    # Group recent entries by type
-    recent_types = Counter()
-    recent_details = {}
-    for e in entries:
+def release_lock():
+    """Release the flux lock file."""
+    LOCK_FILE.unlink(missing_ok=True)
+
+
+# ---------------------------------------------------------------------------
+# State & queue I/O
+# ---------------------------------------------------------------------------
+
+def read_state() -> dict:
+    """Read state from the state file."""
+    if STATE_FILE.exists():
         try:
-            ts = datetime.datetime.fromisoformat(e["ts"])
-        except (ValueError, TypeError):
-            ts = now
-        if ts >= cutoff:
-            etype = e.get("error_type", "unknown")
-            recent_types[etype] += 1
-            if etype not in recent_details:
-                recent_details[etype] = []
-            recent_details[etype].append(e.get("summary", ""))
-
-    suggestions = []
-    seen_tids = set()
-
-    def make_suggestion(tid: str, label: str, priority: int, prompt: str):
-        if tid not in seen_tids:
-            seen_tids.add(tid)
-            suggestions.append({
-                "id": tid,
-                "label": label,
-                "priority": priority,
-                "prompt": prompt,
-            })
-
-    for etype, count in recent_types.most_common():
-        if count < 3:
-            continue
-
-        if etype == "tsc_timeout":
-            make_suggestion(
-                "fix-tsc-slow-typecheck",
-                "[fix] TypeScript type checking keeps timing out",
-                2,
-                "TypeScript `tsc --noEmit` is timing out frequently. Investigate:\n"
-                "- Check for circular dependencies slowing inference\n"
-                "- Look at large union/intersection types\n"
-                "- Consider tsconfig.json `skipLibCheck: true` if not set\n"
-                "- Check for slow `--project references`\n\n"
-                "Run `npx tsc --noEmit` and `npx vitest run` after fixing."
-            )
-        elif etype == "test_failure":
-            examples = recent_details[etype][:3]
-            make_suggestion(
-                "fix-recurring-test-failures",
-                "[fix] Tests are failing repeatedly",
-                2,
-                "Tests have been failing repeatedly. Recent failures:\n"
-                + "\n".join(f"- {s[:150]}" for s in examples)
-                + "\n\nInvestigate root cause and fix the failing tests. "
-                "Run `npx vitest run --reporter=verbose` to identify failures."
-            )
-        elif etype in ("opencode_timeout", "opencode_error"):
-            make_suggestion(
-                "fix-opencode-reliability",
-                "[fix] opencode is timing out or failing often",
-                2,
-                "opencode has been failing frequently. Likely causes:\n"
-                "- Task prompts may be too large (split into smaller tasks)\n"
-                "- opencode server may need restart\n"
-                "- Model may be under load\n\n"
-                "Check `.devloop/logs/` for recent run logs and fix any issues."
-            )
-
-    return suggestions
+            return json.loads(STATE_FILE.read_text())
+        except (json.JSONDecodeError, OSError):
+            pass
+    return {"cycle": 0, "last_task": None, "consecutive_failures": 0, "skipped_tasks": []}
 
 
-# ── Queue ───────────────────────────────────────────────────
+def write_state(state: dict):
+    """Write state to the state file."""
+    STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    STATE_FILE.write_text(json.dumps(state, indent=2, ensure_ascii=False))
+
+
 def load_queue() -> dict:
-    if TASKS_FILE.exists():
+    """Load the task queue. Returns default dict if file missing/malformed."""
+    if QUEUE_FILE.exists():
         try:
-            return json.loads(TASKS_FILE.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, Exception):
-            # Fallback: backup があればそこから読み込む
-            backup = TASKS_FILE.with_suffix(".bak")
+            return json.loads(QUEUE_FILE.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            backup = QUEUE_FILE.with_suffix(".bak")
             if backup.exists():
                 try:
                     return json.loads(backup.read_text(encoding="utf-8"))
-                except (json.JSONDecodeError, Exception):
+                except (json.JSONDecodeError, OSError):
                     pass
-            # どちらもダメなら初期化（空キュー）
-            return {"tasks": [], "$meta": {}}
-    return {"tasks": [], "$meta": {}}
+    return {"tasks": [], "$meta": {
+        "created": time.strftime("%Y-%m-%dT%H:%M:%S+09:00"),
+        "generator": "flux-dev-loop",
+        "description": "Flux project autonomous development loop task queue",
+    }}
 
 
 def save_queue(queue: dict):
-    """Atomic write — 一時ファイルに書き込んでから rename して破損を防ぐ"""
-    tmp = TASKS_FILE.with_suffix(".tmp")
-    tmp.write_text(
-        json.dumps(queue, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
-    tmp.replace(TASKS_FILE)  # 同一ファイルシステム上でアトミックに置き換え
+    """Atomically save the task queue to disk."""
+    QUEUE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = QUEUE_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(queue, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(QUEUE_FILE)
 
 
-def get_next_pending(queue: dict) -> dict | None:
-    for t in queue["tasks"]:
-        if t["status"] == "pending":
-            return t
-    return None
+def read_tasks() -> list:
+    """Read the task list. Returns [] if file missing or malformed."""
+    queue = load_queue()
+    return queue.get("tasks", [])
 
 
-def mark_task(task: dict, status: str):
-    task["status"] = status
-
-
-# ── Health ───────────────────────────────────────────────────
-def is_server_running() -> bool:
-    import socket
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    try:
-        s.connect(("127.0.0.1", OPENCODE_PORT))
+def add_if_new(queue: dict, task: dict):
+    """Add a task to the queue if no existing task has the same id."""
+    existing_ids = {t["id"] for t in queue["tasks"]}
+    if task["id"] not in existing_ids:
+        queue["tasks"].append(task)
         return True
-    except:
-        return False
-    finally:
-        s.close()
-
-
-def ensure_server():
-    if is_server_running():
-        log(f"opencode server running (port {OPENCODE_PORT})")
-        return True
-    log("Starting opencode server via fallback script...")
-
-    # opencode-fallback.sh を使う（無料枠→従量課金の自動フォールバップ）
-    FALLBACK_SCRIPT = r"C:\Users\きょ\mama_care_app\scripts\opencode-fallback.sh"
-    proc = subprocess.Popen(
-        ["bash", FALLBACK_SCRIPT, str(OPENCODE_PORT), str(PROJECT_ROOT)],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-    )
-    # スクリプト出力を監視して listening を検出（最大15秒）
-    for i in range(30):
-        import time
-        time.sleep(0.5)
-        if proc.poll() is not None:
-            # スクリプトが終了しても、サーバーが起動している可能性があるので確認
-            time.sleep(1)  # サーバーが落ち着くのを待つ
-            if is_server_running():
-                log("opencode server started (script exited but server is up)")
-                return True
-            output = proc.stdout.read() if proc.stdout else ""
-            log(f"Fallback script exited early (code {proc.returncode}): {output[-200:]}", "ERROR")
-            return False
-        if is_server_running():
-            log(f"opencode server started via fallback script")
-            return True
-    log("Failed to start opencode server (fallback timed out)", "ERROR")
     return False
 
 
-# ── Execute ─────────────────────────────────────────────────
-def has_changes() -> bool:
-    r = subprocess.run(["git", "diff", "--stat"], capture_output=True, text=True)
-    staged = subprocess.run(["git", "diff", "--cached", "--stat"], capture_output=True, text=True)
-    untracked = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
-    return bool(r.stdout.strip() or staged.stdout.strip() or untracked.stdout.strip())
+# ---------------------------------------------------------------------------
+# Opencode server management
+# ---------------------------------------------------------------------------
 
-
-def run_tests() -> dict:
-    log("Running tests...")
+def is_opencode_running() -> bool:
+    """Check if the opencode server process is listening on the expected port."""
+    import socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
-        r = subprocess.run("npx vitest run", capture_output=True, text=True, shell=True, timeout=300)
-        return r
-    except subprocess.TimeoutExpired as e:
-        log("Tests timed out", "ERROR")
-        return type("Result", (), {"returncode": -1, "stdout": e.stdout or "", "stderr": (e.stderr or "") + "\n[DEVLOOP] Tests timed out"})()
-    except Exception as e:
-        log(f"Tests crashed: {e}", "ERROR")
-        return type("Result", (), {"returncode": -2, "stdout": "", "stderr": f"[DEVLOOP] Tests error: {e}"})()
+        s.settimeout(3)
+        s.connect((OPENCODE_HOST, OPENCODE_PORT))
+        s.close()
+        return True
+    except (socket.timeout, ConnectionRefusedError, OSError):
+        return False
+    finally:
+        try:
+            s.close()
+        except Exception:
+            pass
 
 
-def run_opencode(prompt: str) -> dict:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    LOG_DIR.mkdir(parents=True, exist_ok=True)
-    pf = DATA_DIR / f"prompt_{int(datetime.datetime.now().timestamp())}.txt"
-    pf.write_text(prompt, encoding="utf-8")
-    log("Running opencode...")
-    start = datetime.datetime.now()
+def start_opencode_server():
+    """Start the opencode server in the background on port 8575."""
+    log("Starting opencode server on port 8575...")
+    cmd = [_OPENCODE_BIN, "serve", "--port", str(OPENCODE_PORT), "--hostname", OPENCODE_HOST]
+    logfile = open(PROJECT_DIR / ".devloop" / "opencode-server.log", "w")
+    proc = subprocess.Popen(
+        cmd,
+        cwd=str(PROJECT_DIR),
+        stdout=logfile,
+        stderr=subprocess.STDOUT,
+        stdin=subprocess.DEVNULL,
+    )
+    log(f"opencode server started (PID {proc.pid})")
+    for _ in range(10):
+        time.sleep(1)
+        if is_opencode_running():
+            log("opencode server is ready.")
+            return proc
+    log("Warning: opencode server did not become ready within 10s, continuing anyway...")
+
+
+def pick_task(tasks: list, state: dict) -> dict | None:
+    """Pick the next task to work on based on priority and state."""
+    skipped = set(state.get("skipped_tasks", []))
+    available = [t for t in tasks if t.get("status") == "pending" and t.get("id") not in skipped]
+    if not available:
+        available = [t for t in tasks if t.get("status") == "backlog" and t.get("id") not in skipped]
+    if not available:
+        return None
+    priority_order = {"high": 0, "medium": 1, "low": 2, "critical": -1}
+    available.sort(key=lambda t: (priority_order.get(t.get("priority", "medium"), 99), tasks.index(t)))
+    return available[0]
+
+
+# ---------------------------------------------------------------------------
+# Opencode execution
+# ---------------------------------------------------------------------------
+
+def run_opencode(task_id: str, task_title: str, task_description: str) -> tuple[bool, str]:
+    """Run opencode on a specific task and return (success, output)."""
+    prompt = f"""Implement the following task for the meeting-minutes-app project:
+
+Task ID: {task_id}
+Title: {task_title}
+Description: {task_description}
+
+Please write the necessary code, tests, and documentation. Follow the project's existing conventions.
+Commit your changes when done. Report what you did.
+"""
+    log(f"Running opencode for task {task_id}: {task_title}")
     try:
-        r = subprocess.run(
-            [OPENCODE_SHELL, "-c", f'exec "{OPENCODE_CMD}" run --attach "{OPENCODE_URL}" -m "{OPENCODE_MODEL}" < "{pf}"'],
-            capture_output=True, text=True, timeout=1200,
+        result = subprocess.run(
+            [_OPENCODE_BIN, "run", "-m", prompt],
+            cwd=str(PROJECT_DIR),
+            capture_output=True,
+            text=True,
+            timeout=600,
         )
-        exit_code = r.returncode
-        stdout = r.stdout
-        stderr = r.stderr
-    except subprocess.TimeoutExpired as e:
-        elapsed = (datetime.datetime.now() - start).total_seconds()
-        exit_code = -1
-        stdout = e.stdout or ""
-        stderr = e.stderr or ""
-        stderr += f"\n[DEVLOOP] TIMEOUT after {elapsed:.0f}s"
-        log(f"opencode timed out after {elapsed:.0f}s", "ERROR")
+        output = result.stdout + result.stderr
+        success = result.returncode == 0
+        return success, output
+    except subprocess.TimeoutExpired:
+        return False, f"TIMEOUT: Task {task_id} timed out after 10 minutes."
+    except FileNotFoundError:
+        return False, "ERROR: opencode command not found. Is it installed?"
     except Exception as e:
-        elapsed = (datetime.datetime.now() - start).total_seconds()
-        exit_code = -2
-        stdout = ""
-        stderr = f"[DEVLOOP] Unexpected error: {e}"
-        log(f"opencode crashed: {e}", "ERROR")
-    elapsed = (datetime.datetime.now() - start).total_seconds()
-    # Save log
-    lf = LOG_DIR / f"run_{int(start.timestamp())}.log"
-    lf.write_text(f"# Exit: {exit_code}\n# Elapsed: {elapsed:.1f}s\n# STDOUT:\n{stdout}\n# STDERR:\n{stderr}\n", encoding="utf-8")
-    return {"exit": exit_code, "out": stdout, "err": stderr, "elapsed": elapsed}
+        return False, f"ERROR running opencode: {e}"
 
 
-def git_commit(task: dict):
-    subprocess.run(["git", "add", "-A"], capture_output=True)
-    r = subprocess.run(
-        ["git", "commit", "-m", f"{COMMIT_PREFIX} {task['id']}: {task['label']}"],
-        capture_output=True, text=True,
-    )
-    log(f"Commit: {r.stdout.split(chr(10))[0] if r.stdout else 'done'}")
+def run_opencode_via_server(task_id: str, task_title: str, task_description: str) -> tuple[bool, str]:
+    """Run opencode by connecting to the running server with --attach.
+    Falls back to run_opencode() if server is unavailable.
+    """
+    prompt = f"""Implement task {task_id}: {task_title}
+
+{task_description}
+
+Write the code, test it, and commit. Report what was done."""
+    log(f"Running task {task_id} via opencode server (attach :{OPENCODE_PORT})...")
+
+    prompt_file = PROJECT_DIR / ".devloop" / "prompts" / f"task-{task_id}.md"
+    prompt_file.parent.mkdir(parents=True, exist_ok=True)
+    prompt_file.write_text(prompt, encoding="utf-8")
+
+    server_url = f"http://{OPENCODE_HOST}:{OPENCODE_PORT}"
+    password = os.environ.get("OPENCODE_SERVER_PASSWORD", "flux-dev")
+    model = os.environ.get("OPENCODE_MODEL", "opencode-go/deepseek-v4-flash")
+
+    try:
+        result = subprocess.run(
+            [
+                _OPENCODE_BIN, "run",
+                "--attach", server_url,
+                "-p", password,
+                "-m", model,
+                "--dangerously-skip-permissions",
+                task_title,
+                "-f", str(prompt_file),
+            ],
+            cwd=str(PROJECT_DIR),
+            capture_output=True,
+            text=True,
+            timeout=600,
+        )
+        output = result.stdout + result.stderr
+        success = result.returncode == 0
+        return success, output
+    except subprocess.TimeoutExpired:
+        return False, f"TIMEOUT: Task {task_id} timed out after 10 minutes."
+    except FileNotFoundError:
+        return False, "ERROR: opencode command not found."
+    except Exception as e:
+        log(f"Server-based execution failed ({e}), falling back to direct mode...")
+        return run_opencode(task_id, task_title, task_description)
 
 
-def git_push():
-    """Push current branch to origin."""
-    r = subprocess.run(
-        ["git", "push", "origin", "HEAD"],
-        capture_output=True, text=True, timeout=60,
-    )
-    if r.returncode == 0:
-        log(f"Push: {r.stdout.split(chr(10))[0] if r.stdout else 'done'}")
-    else:
-        log(f"Push failed: {r.stderr.strip()[:200]}", "ERROR")
+# ---------------------------------------------------------------------------
+# Auto-generate tasks
+# ---------------------------------------------------------------------------
+
+def scan_for_untested_services() -> list[dict]:
+    """Find services that don't have corresponding test files."""
+    new_tasks = []
+    svc_dir = PROJECT_DIR / "src" / "services"
+    test_dir = PROJECT_DIR / "src" / "__tests__"
+    if not svc_dir.is_dir():
+        return new_tasks
+
+    try:
+        tested = set()
+        if test_dir.is_dir():
+            for f in test_dir.iterdir():
+                if f.suffix in (".ts", ".tsx") and f.stem.endswith(".test"):
+                    tested.add(f.stem.replace(".test", ""))
+
+        for f in sorted(svc_dir.iterdir()):
+            if f.suffix not in (".ts", ".tsx") or f.stem == "index":
+                continue
+            svc_name = f.stem
+            if svc_name in tested:
+                continue
+            new_tasks.append({
+                "id": f"svc-{svc_name}-test",
+                "label": f"Add unit tests for {svc_name} service",
+                "status": "pending",
+                "retries": 0,
+                "max_retries": 2,
+                "priority": "medium",
+                "prompt": (
+                    f"Create a vitest test file at `src/__tests__/{svc_name}.test.ts` "
+                    f"for `src/services/{svc_name}.ts`.\n\n"
+                    "Read the file first. Test exports.\n"
+                    "Mock @supabase/supabase-js, @react-native-async-storage/async-storage, "
+                    "react-native-url-polyfill/auto.\n\n"
+                    "Do NOT modify any other files.\n\n"
+                    "Run `npx vitest run` to confirm tests pass."
+                ),
+            })
+    except (OSError, Exception):
+        pass
+    return new_tasks
 
 
-# ── Task auto-generation ───────────────────────────────────
-MAX_TASKS_PER_CYCLE = 8
+def scan_for_ts_errors() -> list[dict]:
+    """Run npx tsc --noEmit (quick, with timeout) and parse errors."""
+    new_tasks = []
+    try:
+        start = time.time()
+        result = subprocess.run(
+            [_NPX_BIN, "tsc", "--noEmit"],
+            cwd=str(PROJECT_DIR),
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        elapsed = time.time() - start
+        log(f"tsc --noEmit finished in {elapsed:.1f}s")
+        if result.returncode == 0:
+            return new_tasks
 
-def auto_generate(queue: dict) -> int:
-    log("Analyzing codebase for new tasks...")
-    added = 0
-    existing_ids = {t["id"] for t in queue["tasks"]}
+        for line in result.stdout.splitlines():
+            m = re.match(r'^(.+)\((\d+),(\d+)\):\s+error\s+(TS\d+):\s(.+)', line)
+            if m:
+                filepath = m.group(1).strip()
+                # Skip node_modules
+                if "node_modules" in filepath:
+                    continue
+                err_code = m.group(4)
+                err_msg = m.group(5)
+                # Truncate very long error messages for the task id
+                safe_id_suffix = err_code
+                new_tasks.append({
+                    "id": f"tsc-{safe_id_suffix}-{Path(filepath).stem}",
+                    "label": f"[fix] TS error {err_code} in {filepath}",
+                    "status": "pending",
+                    "retries": 0,
+                    "max_retries": 2,
+                    "priority": "high",
+                    "prompt": (
+                        f"Fix the TypeScript error in `{filepath}`:\n"
+                        f"{err_code}: {err_msg}\n\n"
+                        "Read the file, fix the error. "
+                        "Run `npx vitest run` and `npx tsc --noEmit` to verify."
+                    ),
+                })
+    except subprocess.TimeoutExpired:
+        log("tsc --noEmit timed out (60s), skipping TS error scan")
+    except (FileNotFoundError, OSError, Exception) as e:
+        log(f"tsc scan failed: {e}")
+    return new_tasks
 
-    def add_if_new(tid: str, label: str, prompt: str, priority: int = 2):
-        nonlocal added
-        if added >= MAX_TASKS_PER_CYCLE:
-            return
-        if tid in existing_ids:
-            return
-        queue["tasks"].append({
-            "id": tid,
-            "label": label,
-            "status": "pending", "retries": 0, "max_retries": 2,
-            "prompt": prompt,
-        })
-        existing_ids.add(tid)
-        added += 1
-        log(f"  + {tid}: {label[:60]}")
 
-    skip_dirs = {"node_modules", ".next", ".git", ".expo"}
+def scan_for_todos() -> list[dict]:
+    """Find TODO/FIXME/HACK comments in source code."""
+    new_tasks = []
     search_roots = [
-        p for p in [PROJECT_ROOT / "src", PROJECT_ROOT / "app"]
+        p for p in [PROJECT_DIR / "src", PROJECT_DIR / "app"]
         if p.is_dir()
     ]
+    todo_pattern = re.compile(r'(?:TODO|FIXME|HACK)\b(.+)$', re.MULTILINE | re.IGNORECASE)
 
-    # ── TIER 1: NEW FEATURES (highest priority) ────────────
-    # ── 1a. Feature gap: missing CRUD screens for services ──
-    tab_screens = set()
-    tabs_dir = PROJECT_ROOT / "app" / "(tabs)"
-    if tabs_dir.is_dir():
-        for d in tabs_dir.iterdir():
-            if d.is_dir() and not d.name.startswith("_"):
-                tab_screens.add(d.name)
-    for f in sorted((PROJECT_ROOT / "src" / "services").glob("*.ts")):
-        svc = f.stem
-        if svc == "index":
-            continue
-        screen_names = {svc, svc.replace("-", ""), svc + "s"}
-        if not any(s in tab_screens for s in screen_names):
+    for root_dir in search_roots:
+        for ext in ("*.ts", "*.tsx"):
             try:
-                content = f.read_text(encoding="utf-8", errors="ignore")
-                is_major = len(content) > 1500 and ("export" in content)
-            except Exception:
-                is_major = False
-            if is_major:
-                add_if_new(
-                    f"feat-{svc}-screen",
-                    f"[feature] Create {svc} management screen",
-                    f"Create a new screen at `app/(tabs)/{svc}/` for managing {svc} data.\n\nRead existing screens (e.g. app/(tabs)/minutes/) as reference pattern.\nImplement: list view, create form, edit, delete.\n\nRun `npx vitest run` and `npx tsc --noEmit`.",
-                    priority=1
-                )
+                files = list(root_dir.rglob(ext))
+            except (FileNotFoundError, OSError):
+                continue
+            for fpath in sorted(files):
+                if "node_modules" in str(fpath):
+                    continue
+                try:
+                    content = fpath.read_text(encoding="utf-8")
+                except Exception:
+                    continue
+                for m in todo_pattern.finditer(content):
+                    text = m.group(1).strip()
+                    if not text:
+                        text = "(no description)"
+                    # Shorten for task id
+                    short = re.sub(r'[^\w\s]', '', text)[:40].strip().replace(' ', '-')
+                    new_tasks.append({
+                        "id": f"todo-{fpath.stem}-{short[:30]}",
+                        "label": f"[TODO] {fpath}: {text[:80]}",
+                        "status": "pending",
+                        "retries": 0,
+                        "max_retries": 2,
+                        "priority": "medium",
+                        "prompt": (
+                            f"Address the TODO in `{fpath}`:\n{text}\n\n"
+                            "Read the file, implement the fix. Run `npx vitest run`."
+                        ),
+                    })
+    return new_tasks
 
-    # ── 1b. Feature enhancements for existing screens ──────
-    screen_features = {
-        "search": ("Search/filter bar", "Add a search bar at the top to filter items by name or content."),
-        "sort": ("Sort options", "Add sort controls (by date, name, status) with ascending/descending toggle."),
-        "pull-refresh": ("Pull-to-refresh", "Add RefreshControl to the FlatList so users can pull down to refresh data."),
-        "empty-state": ("Better empty state", "Enhance the empty state with an illustration, description, and CTA button."),
-    }
-    for screen_dir in sorted(tab_screens):
-        screen_path = tabs_dir / screen_dir
-        screen_files = set()
-        for ext in ("*.tsx", "*.ts"):
-            for p in screen_path.rglob(ext):
-                screen_files.add(p.name)
-        screen_content = ""
-        for sf in screen_files:
-            try:
-                screen_content += (screen_path / sf).read_text(encoding="utf-8", errors="ignore")
-            except Exception:
-                pass
-        for feat_key, (feat_label, feat_desc) in screen_features.items():
-            tid = f"enh-{screen_dir}-{feat_key}"
-            if tid in existing_ids:
-                continue
-            # Check if already implemented
-            if feat_key == "search" and ("search" in screen_content.lower() or "filter" in screen_content.lower()):
-                continue
-            if feat_key == "sort" and "sort" in screen_content.lower():
-                continue
-            if feat_key == "pull-refresh" and "RefreshControl" in screen_content:
-                continue
-            if feat_key == "empty-state" and ("empty" in screen_content.lower() or "no data" in screen_content.lower()):
-                continue
-            add_if_new(
-                tid,
-                f"[enhance] {screen_dir}: {feat_label}",
-                f"Enhance the `{screen_dir}` screen: {feat_desc}\n\nLook at the current code in `app/(tabs)/{screen_dir}/`, implement the enhancement. Run `npx vitest run`.",
-                priority=1
-            )
 
-    # ── 1c. Cross-cutting new feature suggestions ──────────
-    new_features = [
-        ("fav-favorites", "Favorites/bookmarks", "Allow users to bookmark important items and view them in a dedicated 'Favorites' section."),
-        ("cal-calendar-view", "Calendar view for minutes", "Add a calendar tab to browse minutes by date with a month-at-a-glance view."),
-        ("exp-export-pdf", "Export to PDF/text", "Add an export button that generates PDF or text file from meeting minutes and shares it."),
-        ("dash-dashboard", "Dashboard with stats", "Create a dashboard tab showing usage stats, recent activity, and quick actions."),
-        ("hist-history-tab", "Recent history view", "Add a chronological history view showing recent minute edits, transcriptions, and uploads."),
-        ("search-global", "Global search across data", "Implement a global search screen that searches across all data types (minutes, transcriptions, recordings)."),
-    ]
-    # Only suggest features whose screen doesn't exist yet
-    existing_feat_ids = {t["id"].split("-")[1] for t in queue["tasks"] if t["id"].startswith("feat-")}
-    existing_screen_keywords = {s.replace("-", "").lower() for s in tab_screens}
-    for nf_id, nf_label, nf_prompt_template in new_features:
-        prefix = nf_id.split("-")[0]
-        if nf_id not in existing_ids and prefix not in existing_feat_ids:
-            # Check if a similar screen already exists
-            keyword = nf_id.split("-", 1)[1].replace("-", "").lower()
-            if keyword not in existing_screen_keywords:
-                add_if_new(
-                    nf_id,
-                    f"[new feature] {nf_label}",
-                    f"Implement a new feature: {nf_label}\n\n{nf_prompt_template}\n\nStudy existing screens (e.g. app/(tabs)/minutes/) for patterns. Add a new tab if appropriate or add to existing navigation.\n\nRun `npx vitest run` and `npx tsc --noEmit`.",
-                    priority=1
-                )
+def scan_for_long_functions() -> list[dict]:
+    """Find functions longer than 60 lines in service files.
+    Uses brace-matching to measure actual function body.
+    """
+    new_tasks = []
+    svc_dir = PROJECT_DIR / "src" / "services"
+    if not svc_dir.is_dir():
+        return new_tasks
 
-    # ── TIER 2: TESTING ────────────────────────────────────
-    # ── 2a. Untested service functions ─────────────────────
-    for f in sorted((PROJECT_ROOT / "src" / "services").glob("*.ts")):
-        svc = f.stem
-        if svc == "index":
+    func_pattern = re.compile(r'(?:export\s+)?(?:async\s+)?function\s+(\w+)')
+
+    for fpath in sorted(svc_dir.iterdir()):
+        if fpath.suffix not in (".ts", ".tsx"):
             continue
         try:
-            content = f.read_text(encoding="utf-8", errors="ignore")
+            content = fpath.read_text(encoding="utf-8")
         except Exception:
             continue
-        # Find exported functions
-        funcs = re.findall(r"export\s+(?:async\s+)?function\s+(\w+)", content)
-        # Find matching test file
-        test_files = list(PROJECT_ROOT.glob(f"src/__tests__/{svc}.test.*"))
-        tested_funcs = set()
-        for tf in test_files:
-            try:
-                tc = tf.read_text(encoding="utf-8", errors="ignore")
-                tested_funcs.update(re.findall(r"(?:describe|it|test)\([\"'](\w+)", tc))
-            except Exception:
-                pass
-        untested = [fn for fn in funcs if fn not in tested_funcs]
-        if untested:
-            add_if_new(
-                f"test-{svc}-coverage",
-                f"[test] Increase {svc} test coverage ({len(untested)} untested functions)",
-                f"Add missing unit tests for these functions in `src/services/{svc}.ts`: {', '.join(untested)}\n\nRead the file and add tests to `src/__tests__/{svc}.test.ts`. Mock external dependencies. Run `npx vitest run`.",
-                priority=2
-            )
 
-    # ── 2b. Screens without test files ─────────────────────
-    for screen_dir in sorted(tab_screens):
-        test_in_screen = list((tabs_dir / screen_dir).rglob("__tests__/*.test.*"))
-        if not test_in_screen:
-            add_if_new(
-                f"test-{screen_dir}-screen",
-                f"[test] Add tests for {screen_dir} screen",
-                f"Create unit tests for the `{screen_dir}` screen at `app/(tabs)/{screen_dir}/__tests__/`.\n\nRead the screen files, test rendering and main interactions. Follow patterns from other screen tests. Run `npx vitest run`.",
-                priority=2
-            )
-
-    # ── TIER 3: CODE QUALITY ───────────────────────────────
-    # ── 3a. `any` type cleanup ─────────────────────────────
-    any_count = 0
-    for root_dir in search_roots:
-        for ext in ("*.ts", "*.tsx"):
-            try:
-                files = list(root_dir.rglob(ext))
-            except (FileNotFoundError, OSError):
+        for m in func_pattern.finditer(content):
+            fn_name = m.group(1)
+            brace_start = content.find("{", m.end())
+            if brace_start == -1:
                 continue
-            for f in sorted(files):
-                if any(x in f.parts for x in skip_dirs) or ".test." in f.name:
-                    continue
-                try:
-                    content = f.read_text(encoding="utf-8", errors="ignore")
-                except Exception:
-                    continue
-                # Count `any` type annotations (not comments)
-                any_matches = re.findall(r":\s*any\b", content)
-                if any_matches:
-                    any_count += len(any_matches)
-    if any_count > 0:
-        add_if_new(
-            "refactor-any-types",
-            f"[quality] Replace {any_count} `any` types with specific types",
-            f"Found {any_count} `any` type annotations in the codebase.\n\nScan `src/` and `app/` for `: any` patterns and replace with proper TypeScript types/interfaces. Prioritize service files first.\n\nRun `npx vitest run` and `npx tsc --noEmit`.",
-            priority=3
-        )
-
-    # ── 3b. Error handling gaps ────────────────────────────
-    for root_dir in search_roots:
-        for ext in ("*.ts",):
-            try:
-                files = list(root_dir.rglob(ext))
-            except (FileNotFoundError, OSError):
+            # Brace matching for actual body
+            depth = 1
+            pos = brace_start + 1
+            while depth > 0 and pos < len(content):
+                c = content[pos]
+                if c == "{":
+                    depth += 1
+                elif c == "}":
+                    depth -= 1
+                pos += 1
+            if depth != 0:
                 continue
-            for f in sorted(files):
-                if any(x in f.parts for x in skip_dirs) or ".test." in f.name:
-                    continue
-                try:
-                    content = f.read_text(encoding="utf-8", errors="ignore")
-                except Exception:
-                    continue
-                # Find async functions without try-catch
-                async_funcs = re.findall(r"(?:export\s+)?async\s+function\s+(\w+)", content)
-                for fn in async_funcs:
-                    # Find the function body using a simple heuristic
-                    pattern = rf"(?:export\s+)?async\s+function\s+{fn}\s*\([^)]*\)\s*{{"
-                    m = re.search(pattern, content)
-                    if m:
-                        start = m.end()
-                        # Get the function body (up to 500 chars)
-                        body = content[start:start+500]
-                        if "try" not in body and "catch" not in body:
-                            add_if_new(
-                                f"fix-{f.stem}-{fn}-error-handling",
-                                f"[fix] Add error handling to {f.stem}.{fn}()",
-                                f"Function `{fn}()` in `{f.relative_to(PROJECT_ROOT)}` is async but lacks try-catch error handling.\n\nRead the file, add proper error handling with meaningful error messages. Run `npx vitest run`.",
-                                priority=3
-                            )
+            fn_lines = content[m.start():pos].count("\n")
+            if fn_lines > 60:
+                svc_name = fpath.stem
+                new_tasks.append({
+                    "id": f"refactor-{svc_name}-{fn_name}-split",
+                    "label": f"[refactor] {svc_name}.{fn_name}() is {fn_lines} lines, consider splitting",
+                    "status": "pending",
+                    "retries": 0,
+                    "max_retries": 2,
+                    "priority": "low",
+                    "prompt": (
+                        f"Function `{fn_name}()` in `src/services/{svc_name}.ts` "
+                        f"is {fn_lines} lines long.\n\n"
+                        "Read the file, break it into smaller helper functions. "
+                        "Keep the public API unchanged. Run `npx vitest run`."
+                    ),
+                })
+    return new_tasks
 
-    # ── 3c. Console.log cleanup ────────────────────────────
-    console_count = 0
-    for root_dir in search_roots:
-        for ext in ("*.ts", "*.tsx"):
-            try:
-                files = list(root_dir.rglob(ext))
-            except (FileNotFoundError, OSError):
-                continue
-            for f in sorted(files):
-                if any(x in f.parts for x in skip_dirs) or ".test." in f.name:
-                    continue
-                try:
-                    content = f.read_text(encoding="utf-8", errors="ignore")
-                except Exception:
-                    continue
-                logs = re.findall(r"console\.(?:log|warn|error)\(", content)
-                console_count += len(logs)
-    if console_count > 0:
-        add_if_new(
-            "refactor-console-logs",
-            f"[quality] Review {console_count} console.log/warn/error calls",
-            f"Found {console_count} console.log/warn/error calls in production code.\n\nReview each one. Replace debug logs with proper logging or remove them. Keep only meaningful error logging.\n\nRun `npx vitest run`.",
-            priority=3
-        )
 
-    # ── 3d. TODO/FIXME/HACK/BUG scanning ───────────────────
-    for root_dir in search_roots:
-        for ext in ("*.ts", "*.tsx"):
-            try:
-                files = list(root_dir.rglob(ext))
-            except (FileNotFoundError, OSError):
-                continue
-            for f in sorted(files):
-                if any(x in f.parts for x in skip_dirs):
-                    continue
-                try:
-                    content = f.read_text(encoding="utf-8", errors="ignore")
-                except Exception:
-                    continue
-                for mtch in re.finditer(r"(TODO|FIXME|HACK|BUG|XXX)\s*[:-]?\s*(.+)", content):
-                    tag, desc = mtch.group(1), mtch.group(2).strip()
-                    add_if_new(
-                        f"todo-{f.stem}-{tag.lower()}",
-                        f"[{tag}] {f.relative_to(PROJECT_ROOT)}: {desc[:80]}",
-                        f"Address the {tag} in `{f.relative_to(PROJECT_ROOT)}`:\n{desc}\n\nRead the file, implement the fix. Run `npx vitest run`.",
-                        priority=3
-                    )
+def auto_generate_tasks(queue: dict) -> int:
+    """Scan the project and add newly discovered tasks to the queue.
+    Returns the number of new tasks added.
+    """
+    log("Auto-generating tasks from project scan...")
+    added = 0
 
-    # ── 3e. TypeScript compilation errors ──────────────────
-    try:
-        tsc_result = subprocess.run(
-            ["npx", "tsc", "--noEmit"],
-            capture_output=True, text=True, shell=True, timeout=300
-        )
-        if tsc_result.returncode != 0:
-            tsc_seen = set()
-            for line in tsc_result.stdout.splitlines() + tsc_result.stderr.splitlines():
-                line = line.strip()
-                m = re.match(r'^(.+?):\s*error\s+(TS\d+)\s*:\s*(.+)$', line, re.IGNORECASE)
-                if not m:
-                    m = re.match(r'^(.+?)\((\d+),\d+\):\s*error\s+(TS\d+)\s*:\s*(.+)$', line)
-                if m:
-                    path_part = m.group(1).replace("\\", "/")
-                    # Extract TS error code from correct group
-                    if m.lastindex == 3:  # pattern 1: path: error TSxxx: msg
-                        err_code = m.group(2)
-                    elif m.lastindex == 4:  # pattern 2: path(line,col): error TSxxx: msg
-                        err_code = m.group(3)
-                    else:
-                        err_code = m.group(m.lastindex)  # fallback
-                    msg = m.group(m.lastindex)
-                    # Normalise TS error code
-                    if not err_code.startswith("TS"):
-                        err_code = "TS" + err_code
-                    tid = f"tsc-{err_code.lower()}"
-                    if tid not in existing_ids and err_code not in tsc_seen:
-                        tsc_seen.add(err_code)
-                        add_if_new(
-                            tid,
-                            f"[fix] TS error {err_code} in {path_part}",
-                            f"Fix the TypeScript error in `{path_part}`:\n{err_code}: {msg}\n\nRead the file, fix the error. Run `npx vitest run` and `npx tsc --noEmit` to verify.",
-                            priority=3
-                        )
-    except subprocess.TimeoutExpired:
-        log("tsc --noEmit timed out, skipping", "WARN")
-        record_failure("auto_tsc", "tsc_timeout", "tsc --noEmit timed out during auto_generate (timeout=300s)")
-    except FileNotFoundError:
-        log("npx not found, skipping tsc check", "WARN")
+    generators = [
+        ("untested services", scan_for_untested_services),
+        ("TypeScript errors", scan_for_ts_errors),
+        ("TODO/FIXME comments", scan_for_todos),
+        ("long functions (>60 lines)", scan_for_long_functions),
+    ]
 
-    # ── TIER 4: REFACTORING (lowest priority) ─────────────
-    # ── 4a. Long functions ─────────────────────────────────
-    for root_dir in [PROJECT_ROOT / "src" / "services"]:
-        if not root_dir.is_dir():
-            continue
-        for f in sorted(root_dir.glob("*.ts")):
-            try:
-                content = f.read_text(encoding="utf-8", errors="ignore")
-            except Exception:
-                continue
-            # Measure actual function body using brace matching,
-            # not span to next function keyword (which includes unrelated helpers).
-            func_starts = list(re.finditer(r"(?:export\s+)?(?:async\s+)?function\s+(\w+)", content))
-            for m in func_starts:
-                fn_name = m.group(1)
-                fn_start = m.start()
-                # Locate the opening brace of the function body
-                brace_start = content.find("{", m.end())
-                if brace_start == -1:
-                    continue
-                # Match braces to find the actual closing brace
-                depth = 1
-                pos = brace_start + 1
-                while depth > 0 and pos < len(content):
-                    c = content[pos]
-                    if c == "{":
-                        depth += 1
-                    elif c == "}":
-                        depth -= 1
-                    pos += 1
-                if depth != 0:
-                    continue  # Unbalanced braces, skip
-                fn_lines = content[fn_start:pos].count("\n")
-                if fn_lines > 60:
-                    add_if_new(
-                        f"refactor-{f.stem}-{fn_name}-split",
-                        f"[refactor] {f.stem}.{fn_name}() is {fn_lines} lines, consider splitting",
-                        f"Function `{fn_name}()` in `{f.relative_to(PROJECT_ROOT)}` is {fn_lines} lines long.\n\nRead the file, break it into smaller helper functions. Keep the public API unchanged. Run `npx vitest run`.",
-                        priority=4
-                    )
+    for label, gen_fn in generators:
+        try:
+            tasks = gen_fn()
+            log(f"  {label}: {len(tasks)} candidate(s)")
+            for t in tasks:
+                if add_if_new(queue, t):
+                    added += 1
+        except Exception as e:
+            log(f"  {label} scan failed: {e}")
 
-    # ── Failure-based improvement tasks ──────────────────────
-    for s in get_failure_patterns():
-        add_if_new(s["id"], s["label"], s["prompt"], priority=s["priority"])
-
-    if added:
+    if added > 0:
         save_queue(queue)
-        log(f"Auto-generated {added} task(s)")
+        log(f"Added {added} new task(s) to queue.")
+    else:
+        log("No new tasks discovered — all up to date.")
     return added
 
 
-# ── Parse test output ──────────────────────────────────────
-def parse_tests(out: str) -> dict:
-    # Strip ANSI escape codes
-    ansi_clean = re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', out)
-    files = re.search(r"Test Files\s+(\d+) passed", ansi_clean)
-    tests = re.search(r"Tests\s+(\d+) passed", ansi_clean)
-    failed = re.search(r"Tests\s+\d+ failed", ansi_clean)
-    return {
-        "files": int(files.group(1)) if files else 0,
-        "tests": int(tests.group(1)) if tests else 0,
-        "failed": bool(failed) or False,
-    }
-
-
-def cleanup_logs():
-    """Keep log directory tidy — trim old run logs and loop.log."""
-    KEEP_RUN_LOGS = 20
-    LOOP_LOG_MAX_LINES = 200
-
-    # ── Run logs ──
-    run_logs = sorted(LOG_DIR.glob("run_*.log"), key=lambda p: p.stat().st_mtime, reverse=True)
-    for old in run_logs[KEEP_RUN_LOGS:]:
-        try:
-            old.unlink()
-        except OSError:
-            pass
-
-    # ── loop.log ──
-    lp = LOG_DIR / "loop.log"
-    if lp.exists():
-        try:
-            lines = lp.read_text(encoding="utf-8").splitlines()
-            if len(lines) > LOOP_LOG_MAX_LINES:
-                lp.write_text("\n".join(lines[-LOOP_LOG_MAX_LINES:]) + "\n", encoding="utf-8")
-        except OSError:
-            pass
-
-
-# ── Single cycle ────────────────────────────────────────────
-def run_one_cycle() -> str:
-    """
-    Run a single dev cycle. Returns a human-readable summary string.
-    """
-    cleanup_logs()  # Tidy up logs at the start of each cycle
-    try:
-        # Crash recovery
-        queue = load_queue()
-        recovered = []
-        for t in queue["tasks"]:
-            if t["status"] == "running":
-                t["status"] = "pending"
-                log(f"Crash recovery: {t['id']} reset to pending")
-                recovered.append(t['id'])
-        save_queue(queue)
-        if recovered:
-            user_msg(f"⚠️ 前回のタスク（{', '.join(recovered[:2])}）が途中で止まってたからリセットしたよ")
-
-        if not ensure_server():
-            user_msg("💥 opencodeサーバー起動できなかった…")
-            return "ERROR: opencode server could not be started"
-
-        queue = load_queue()
-        task = get_next_pending(queue)
-        if task is None:
-            # Try auto-generate
-            user_msg("🤔 今のタスク全部終わったから、新しいタスク探してみるね")
-            added = auto_generate(queue)
-            if added == 0:
-                user_msg("✨ やることも増やすこともないみたい。また30分後に見に来るね〜")
-                return "NO_WORK: no pending tasks, no new tasks auto-generated"
-            queue = load_queue()
-            task = get_next_pending(queue)
-            if task is None:
-                user_msg("✨ 新しいタスク見つからなかった。また後で〜")
-                return "NO_WORK: auto-generation found nothing"
-
-        tid = task["id"]
-        log(f">> Starting: {task['label']} ({tid})")
-        # Extract screen/label from task label like "[enhance] auth: Search/filter bar"
-        label = task["label"].split(":")[-1].strip() if ":" in task["label"] else task["label"]
-        user_msg(f"🤖 {label}やっていくよ！")
-        mark_task(task, "running")
-        save_queue(queue)
-
-        # Run opencode
-        r = run_opencode(task["prompt"])
-
-        # Record opencode failures
-        if r["exit"] == -1:
-            record_failure(task["id"], "opencode_timeout",
-                           f"opencode timed out after {r['elapsed']:.0f}s: {task['label']}")
-        elif r["exit"] != 0:
-            record_failure(task["id"], "opencode_error",
-                           f"opencode exited code {r['exit']} ({r['elapsed']:.0f}s): {r['err'][:150]}")
-
-        changes = has_changes()
-        if not changes and r["exit"] == 0:
-            log("opencode exited 0 but made no changes — may be a no-op")
-
-        # Test
-        tr = run_tests()
-        tp = parse_tests(tr.stdout + tr.stderr)
-        tests_ran = tp["tests"] > 0 or tp["files"] > 0
-        tests_ok = tr.returncode == 0 and not tp["failed"]
-
-        if changes and tests_ok and tests_ran:
-            log(f"SUCCESS: {tp['tests']} tests, {r['elapsed']:.1f}s")
-            mark_task(task, "completed")
-            git_commit(task)
-            git_push()
-            save_queue(queue)
-            # Get next pending task for the message
-            next_q = load_queue()
-            next_task = get_next_pending(next_q)
-            next_msg = f" ⏩ 次は{next_task['label'].split(':')[-1].strip()}" if next_task else ""
-            user_msg(f"✅ {label}できたよ！（{r['elapsed']:.0f}s / {tp['tests']}tests）{next_msg}")
-            return f"DONE ({r['elapsed']:.1f}s, {tp['tests']} tests): {task['label']}"
-        elif not changes and tests_ok and tests_ran:
-            # No changes needed — task already resolved (e.g. function already refactored)
-            log(f"ALREADY DONE: no changes needed, {tp['tests']} tests pass")
-            mark_task(task, "completed")
-            save_queue(queue)
-            next_q = load_queue()
-            next_task = get_next_pending(next_q)
-            next_msg = f" ⏩ 次は{next_task['label'].split(':')[-1].strip()}" if next_task else ""
-            user_msg(f"✅ {label}はもう解決済みだったよ！（{tp['tests']} tests）{next_msg}")
-            return f"ALREADY_DONE: {task['label']}"
-        elif changes and tests_ok and not tests_ran:
-            log("Changes made but 0 tests ran — treating as failure", "WARN")
-            record_failure(task["id"], "test_failure",
-                           f"0 tests ran after opencode: {task['label']}")
-            task["retries"] += 1
+def generate_report(success: bool, task: dict, output: str, cycle: int) -> str:
+    """Generate a human-readable report of the cycle."""
+    status = "✅ SUCCESS" if success else "❌ FAILED"
+    lines = [
+        f"🔄 **Flux Dev Loop - Cycle {cycle}**",
+        f"",
+        f"Task: **{task.get('id', 'N/A')}**: {task.get('title', 'N/A')}",
+        f"Status: {status}",
+        f"",
+    ]
+    if output.strip():
+        clean = re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', output)
+        clean = clean.strip()
+        if len(clean) > 2000:
+            lines.append("**Output (truncated):**")
+            lines.append("```")
+            lines.append(clean[:2000])
+            lines.append("```")
+            lines.append(f"... ({len(clean) - 2000} more chars)")
         else:
-            err_detail = tr.stderr.strip()[:200] if tr.stderr else f"exit {tr.returncode}"
-            record_failure(task["id"], "test_failure",
-                           f"Tests failed ({err_detail}): {task['label']}")
-            task["retries"] += 1
-
-        remaining = task.get("max_retries", 2) - task["retries"]
-        if remaining > 0:
-            log(f"FAIL, retrying ({remaining} left)", "ERROR")
-            mark_task(task, "pending")
-            save_queue(queue)
-            user_msg(f"🤔 テスト通らなかった… リトライするね（残り{remaining}回）")
-            return f"RETRY ({remaining} left): {task['label']}"
-        else:
-            log(f"FAIL, max retries reached — skipping", "ERROR")
-            mark_task(task, "skipped")
-            save_queue(queue)
-            user_msg(f"😅 {label}は何度試してもダメだったからスキップするね")
-            return f"SKIPPED (max retries): {task['label']}"
-    except Exception as e:
-        import traceback
-        tb = traceback.format_exc()
-        log(f"UNEXPECTED CRASH: {e}\n{tb}", "CRITICAL")
-        user_msg("💥 なんか予期しないエラーで落ちちゃった…")
-        return f"CRASHED: {e}"
-
-
-def status_text() -> str:
-    queue = load_queue()
-    lines = [f"Flux Dev Loop — {datetime.datetime.now().strftime('%H:%M')}"]
-    lines.append(f"Tasks: {len(queue['tasks'])} total")
-    for t in queue["tasks"]:
-        icon = {"pending": "○", "running": "▶", "completed": "✓", "skipped": "✗"}.get(t["status"], "?")
-        lines.append(f"  {icon} {t['id']}: {t['label']} ({t['status']})")
+            lines.append("**Output:**")
+            lines.append("```")
+            lines.append(clean)
+            lines.append("```")
+    else:
+        lines.append("*No output from opencode.*")
     return "\n".join(lines)
 
 
-JOB_ID = "3b28ebec163e"
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
 
+def main():
+    log("Flux Dev Loop starting...")
 
-def self_trigger(schedule_str: str = "every 1m"):
-    """Update cron schedule to a relative interval (e.g. 'every 1m', 'every 30m')."""
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+    if not acquire_lock():
+        log("Another flux process is already running. Exiting.")
+        return "[SILENT]"
+
     try:
-        r = subprocess.run(
-            ["hermes", "cron", "edit", JOB_ID, "--schedule", schedule_str],
-            capture_output=True, text=True, timeout=15,
-        )
-        if r.returncode == 0:
-            log(f"Self-trigger: schedule → {schedule_str}")
-        else:
-            log(f"Self-trigger failed: {r.stderr.strip()[:200]}", "ERROR")
-    except Exception as e:
-        log(f"Self-trigger exception: {e}", "ERROR")
+        state = read_state()
+        state["cycle"] = state.get("cycle", 0) + 1
+        log(f"Cycle #{state['cycle']}")
 
-
-# ── CLI ──────────────────────────────────────────────────────
-if __name__ == "__main__":
-    if "--status" in sys.argv:
-        print(status_text())
-        sys.exit(0)
-
-    if "--add-task" in sys.argv:
-        idx = sys.argv.index("--add-task") + 1
-        if idx >= len(sys.argv):
-            print("ERROR: --add-task requires a file path")
-            sys.exit(1)
-        path = Path(sys.argv[idx])
-        if not path.exists():
-            print(f"ERROR: file not found: {path}")
-            sys.exit(1)
+        # Crash recovery: reset running → pending
         queue = load_queue()
-        prompt = path.read_text(encoding="utf-8")
-        tid = f"manual-{path.stem}"
-        if any(t["id"] == tid for t in queue["tasks"]):
-            print(f"Task {tid} already exists")
-        else:
-            queue["tasks"].append({
-                "id": tid,
-                "label": path.stem.replace("-", " ").title(),
-                "status": "pending", "retries": 0, "max_retries": 2,
-                "prompt": prompt,
-            })
+        recovered = 0
+        for t in queue["tasks"]:
+            if t.get("status") == "running":
+                t["status"] = "pending"
+                recovered += 1
+        if recovered:
+            log(f"Crash recovery: reset {recovered} running task(s) to pending")
             save_queue(queue)
-            print(f"Added: {tid}")
-        sys.exit(0)
 
-    # Default: run one cycle
-    # Crash recovery FIRST — reset any stuck "running" tasks before skip check
-    q = load_queue()
-    recovered = []
-    for t in q["tasks"]:
-        if t["status"] == "running":
-            t["status"] = "pending"
-            t["retries"] = 0
-            log(f"Crash recovery: {t['id'][:50]} reset to pending")
-            recovered.append(t["id"])
-    if recovered:
-        save_queue(q)
-        user_msg(f"⚠️ 前回のタスクが途中で止まってたからリセットしたよ")
-        q = load_queue()  # reload after save
+        tasks = queue.get("tasks", [])
 
-    # Skip if a previous cycle is still in progress (task marked "running") — only if recovery didn't work
-    if any(t["status"] == "running" for t in q["tasks"]):
-        log("Previous task still running — skipping this tick (recovery ineffective)", "WARN")
-        user_msg("⏳ まだ前のタスクやってるみたい。次のtickでまた確認するね")
-        sys.exit(0)
+        # --- Auto-generate if no pending tasks ---
+        pending_count = sum(1 for t in tasks if t.get("status") == "pending")
+        if pending_count == 0:
+            log("No pending tasks. Running auto-generate...")
+            added = auto_generate_tasks(queue)
+            queue = load_queue()  # reload
+            tasks = queue.get("tasks", [])
+            pending_count = sum(1 for t in tasks if t.get("status") == "pending")
+            if pending_count == 0:
+                report = (
+                    "🔄 **Flux Dev Loop**\n\n"
+                    "No pending tasks, and auto-generate found nothing new.\n"
+                    f"All {len(tasks)} tasks completed or skipped. Nothing to do."
+                )
+                print(report)
+                state["consecutive_failures"] = 0
+                write_state(state)
+                return
+            log(f"Auto-generate added {added} new task(s), now {pending_count} pending.")
 
-    result = run_one_cycle()
+        # Check / start opencode server
+        server_proc = None
+        if not is_opencode_running():
+            log("opencode server not running, starting it...")
+            server_proc = start_opencode_server()
+        else:
+            log("opencode server is already running on port 8575.")
 
-    has_work = result and not result.startswith("NO_WORK")
-    if has_work:
-        self_trigger("every 3m")   # fast loop (opencode takes ~2min, so 3m avoids overlap)
-    else:
-        self_trigger("every 30m")  # slow polling when idle
+        # Pick a task
+        task = pick_task(tasks, state)
+        if task is None:
+            report = "🔄 **Flux Dev Loop**\n\nAll tasks completed or skipped. Nothing to do."
+            print(report)
+            return
 
-    # Report — summary already sent by user_msg in run_one_cycle
-    log(f"Cycle result: {result}")
+        log(f"Picked task: {task.get('id', 'N/A')} - {task.get('title', 'N/A')}")
+
+        # Mark as running in queue
+        task["status"] = "running"
+        save_queue(queue)
+
+        # Run the task
+        task_title = task.get("title") or task.get("label", "")
+        task_desc = task.get("description") or task.get("prompt", "")
+        success, output = run_opencode_via_server(
+            task.get("id", ""),
+            task_title,
+            task_desc,
+        )
+
+        # Update task status
+        if success:
+            task["status"] = "completed"
+            state["consecutive_failures"] = 0
+        else:
+            task["retries"] = task.get("retries", 0) + 1
+            if task["retries"] >= task.get("max_retries", 2):
+                task["status"] = "skipped"
+                skipped = state.get("skipped_tasks", [])
+                if task["id"] not in skipped:
+                    skipped.append(task["id"])
+                    state["skipped_tasks"] = skipped
+                log(f"Task {task['id']} skipped (max retries reached)")
+            else:
+                task["status"] = "pending"
+                state["consecutive_failures"] = state.get("consecutive_failures", 0) + 1
+
+        save_queue(queue)
+
+        # Update state
+        state["last_task"] = task.get("id")
+
+        # Generate and print report
+        report = generate_report(success, task, output, state["cycle"])
+        print(report)
+
+        write_state(state)
+        log(f"State saved (success={success}, failures={state.get('consecutive_failures', 0)})")
+
+    finally:
+        release_lock()
+        log("Flux Dev Loop finished.")
+
+
+if __name__ == "__main__":
+    result = main()
+    if result:
+        print(result)
