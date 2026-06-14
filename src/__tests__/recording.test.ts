@@ -97,25 +97,15 @@ beforeEach(async () => {
 // ---- Tests ----
 
 describe("startRecording", () => {
-  it("既に録音中の場合は何もせず警告を出す", async () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+  it("既に録音中の場合は何もせずに戻る", async () => {
     await recording.startRecording();
-    await recording.startRecording();
-    expect(warnSpy).toHaveBeenCalledWith(
-      "[recording] Already recording — ignoring startRecording()",
-    );
-    warnSpy.mockRestore();
+    await expect(recording.startRecording()).resolves.toBeUndefined();
   });
 
-  it("一時停止中は再開を促す警告を出す", async () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+  it("一時停止中は何もせずに戻る", async () => {
     await recording.startRecording();
     await recording.pauseRecording();
-    await recording.startRecording();
-    expect(warnSpy).toHaveBeenCalledWith(
-      "[recording] Recording is paused — call resumeRecording() instead",
-    );
-    warnSpy.mockRestore();
+    await expect(recording.startRecording()).resolves.toBeUndefined();
   });
 
   it("マイク許可がない場合はエラーを投げる", async () => {

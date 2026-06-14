@@ -339,6 +339,5 @@ export async function createStripeCheckoutSession(plan: SubscriptionPlan) {
   //   });
   //   const session = await response.json();
   //   return session;
-  console.warn("Stripe integration not yet configured — returning stub.", { plan });
   return { sessionUrl: null, error: new Error("Stripe checkout not configured") };
 }

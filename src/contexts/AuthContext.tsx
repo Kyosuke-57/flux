@@ -19,7 +19,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(session?.user ?? null);
       })
       .catch((err) => {
-        console.warn("getSession error:", err);
+        console.error("getSession error:", err);
       })
       .finally(() => {
         setIsLoading(false);

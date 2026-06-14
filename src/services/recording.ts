@@ -32,11 +32,9 @@ async function ensurePermissions(): Promise<boolean> {
 
 export async function startRecording(): Promise<void> {
   if (_state === "recording") {
-    console.warn("[recording] Already recording — ignoring startRecording()");
     return;
   }
   if (_state === "paused") {
-    console.warn("[recording] Recording is paused — call resumeRecording() instead");
     return;
   }
 

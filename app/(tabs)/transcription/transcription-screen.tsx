@@ -25,12 +25,6 @@ const SORT_OPTIONS: { key: SortField; label: string }[] = [
   { key: "name", label: "名前" },
   { key: "status", label: "ステータス" },
 ];
-  { key: "all", label: "すべて" },
-  { key: "queued", label: "待機中" },
-  { key: "processing", label: "処理中" },
-  { key: "completed", label: "完了" },
-  { key: "failed", label: "失敗" },
-];
 
 export default function TranscriptionScreen() {
   const { settings } = useSettings();

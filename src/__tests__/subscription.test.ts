@@ -956,18 +956,11 @@ describe("syncRevenueCatEntitlements", () => {
 // ============================================================
 describe("createStripeCheckoutSession", () => {
   it("スタブのレスポンスを返す", async () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-
     const result = await createStripeCheckoutSession("pro");
 
     expect(result).toEqual({
       sessionUrl: null,
       error: new Error("Stripe checkout not configured"),
     });
-    expect(warnSpy).toHaveBeenCalledWith(
-      "Stripe integration not yet configured — returning stub.",
-      { plan: "pro" },
-    );
-    warnSpy.mockRestore();
   });
 });
