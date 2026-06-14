@@ -7,10 +7,16 @@
  */
 import { supabase } from "../lib/supabase";
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
+import type { TranscriptionJob } from "../types";
 
 // 開発中はローカル、本番は flux-api のデプロイ先URL
 const API_BASE_URL =
   process.env.EXPO_PUBLIC_OTOROKU_API_URL ?? "http://localhost:3000";
+
+type TranscriptionJobRow = TranscriptionJob & {
+  minute_id?: string;
+  progress_detail?: string;
+};
 
 export type JobStatus = "queued" | "processing" | "completed" | "failed";
 
@@ -93,8 +99,8 @@ export function subscribeToTranscription(
         table: "transcription_jobs",
         filter: `id=eq.${jobId}`,
       },
-      (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
-        const record = payload.new;
+      (payload: RealtimePostgresChangesPayload<TranscriptionJobRow>) => {
+        const record = payload.new as TranscriptionJobRow;
         const progress: TranscriptionProgress = {
           status: record.status,
           completedChunks: record.completed_chunks,

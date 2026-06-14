@@ -6,6 +6,12 @@ import {
 } from "./transcription";
 import type { TranscriptionProgress } from "./transcription";
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
+import type { TranscriptionJob } from "../types";
+
+type TranscriptionJobRow = TranscriptionJob & {
+  minute_id?: string;
+  progress_detail?: string;
+};
 
 // ─── pipelineManager シングルトン ────────────────────────────
 
@@ -206,8 +212,8 @@ export function subscribeToPipeline(
         table: "transcription_jobs",
         filter: `minute_id=eq.${minuteId}`,
       },
-      (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
-        const record = payload.new;
+      (payload: RealtimePostgresChangesPayload<TranscriptionJobRow>) => {
+        const record = payload.new as TranscriptionJobRow;
 
         const progress: TranscriptionProgress = {
           status: record.status,
