@@ -6,16 +6,28 @@ import type { TranscriptionJob } from "../types";
  * 現在のユーザーの文字起こしジョブ一覧を取得（作成日降順）
  */
 export async function getAllTranscriptionJobs() {
-  const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError };
+  try {
+    const { user, error: authError } = await requireUser();
+    if (authError || !user) return { data: null, error: authError };
 
-  const { data, error } = await supabase
-    .from("transcription_jobs")
-    .select("*")
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: false });
+    const { data, error } = await supabase
+      .from("transcription_jobs")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false });
 
-  return { data: data as TranscriptionJob[] | null, error };
+    if (error) return { data: null, error };
+
+    return { data: data as TranscriptionJob[] | null, error: null };
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "不明なエラーが発生しました";
+    console.error("[getAllTranscriptionJobs]", message);
+    return {
+      data: null,
+      error: { message, details: "", hint: "", code: "UNEXPECTED" } as PostgrestError,
+    };
+  }
 }
 
 /**
