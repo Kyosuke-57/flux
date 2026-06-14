@@ -32,6 +32,7 @@ export function MinuteCard({
   onPress,
   onLongPress,
   onDelete,
+  onExport,
   formatDate,
   getTagName,
   getPreview,
