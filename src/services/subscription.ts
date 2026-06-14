@@ -330,14 +330,23 @@ export async function syncRevenueCatEntitlements(): Promise<void> {
  * Replace with actual Stripe server call when the backend endpoint is ready.
  */
 export async function createStripeCheckoutSession(plan: SubscriptionPlan) {
-  // TODO: Call backend endpoint to create Stripe Checkout Session
-  // Example:
-  //   const response = await fetch('/api/create-checkout-session', {
-  //     method: 'POST',
-  //     headers: { 'Content-Type': 'application/json' },
-  //     body: JSON.stringify({ plan, userId: (await supabase.auth.getUser()).data.user?.id }),
-  //   });
-  //   const session = await response.json();
-  //   return session;
-  return { sessionUrl: null, error: new Error("Stripe checkout not configured") };
+  try {
+    // TODO: Call backend endpoint to create Stripe Checkout Session
+    // Example:
+    //   const response = await fetch("/api/create-checkout-session", {
+    //     method: "POST",
+    //     headers: { "Content-Type": "application/json" },
+    //     body: JSON.stringify({ plan, userId: (await supabase.auth.getUser()).data.user?.id }),
+    //   });
+    //   const session = await response.json();
+    //   return session;
+    return { sessionUrl: null, error: new Error("Stripe checkout not configured") };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "不明なエラー";
+    console.error("createStripeCheckoutSession: 予期しないエラーが発生しました", error);
+    return {
+      sessionUrl: null,
+      error: new Error(`Stripeチェックアウトセッションの作成に失敗しました: ${message}`),
+    };
+  }
 }
