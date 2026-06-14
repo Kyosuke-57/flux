@@ -253,10 +253,10 @@ export default function SettingsScreen() {
           <View style={styles.row}>
             <Text style={[styles.rowText, { color: c.textPrimary }]}>議事録生成モード</Text>
             <View style={[styles.toggleGroup, { backgroundColor: c.surfaceSecondary }]}>
-              {[
+              {([
                 { label: "自動生成", value: "auto" },
                 { label: "手動編集", value: "manual" },
-              ].map((opt) => (
+              ] as const).map((opt) => (
                 <TouchableOpacity
                   key={opt.value}
                   style={[
