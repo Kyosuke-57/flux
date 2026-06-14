@@ -13,7 +13,7 @@ import {
   sortRecordings,
 } from "../hooks/utils";
 import type { SortConfig } from "../hooks/utils";
-import type { Recording } from "../../../src/types";
+import type { Recording } from "../../../../src/types";
 
 // ─── フレームワーク動作確認 ───────────────────────────────
 
