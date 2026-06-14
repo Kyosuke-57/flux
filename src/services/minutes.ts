@@ -7,7 +7,7 @@ import type { Minute } from "../types";
  */
 export async function getAllMinutes(): Promise<{ data: Minute[] | null; error: PostgrestError | null }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError };
+  if (authError || !user) return { data: null, error: authError as unknown as PostgrestError | null };
 
   const { data, error } = await supabase
     .from("minutes")
@@ -25,7 +25,7 @@ export async function getMinute(
   id: string
 ): Promise<{ data: Minute | null; error: PostgrestError | null }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError };
+  if (authError || !user) return { data: null, error: authError as unknown as PostgrestError | null };
 
   const { data, error } = await supabase
     .from("minutes")
@@ -85,7 +85,7 @@ export async function duplicateMinute(
 ): Promise<{ data: Minute | null; error: PostgrestError | null }> {
   const { data: original, error: fetchError } = await getMinute(id);
   if (fetchError || !original) {
-    return { data: null, error: fetchError ?? new Error("Minute not found") };
+    return { data: null, error: (fetchError ?? new Error("Minute not found")) as unknown as PostgrestError | null };
   }
 
   return createMinute(
@@ -130,7 +130,7 @@ export async function deleteMinute(
   id: string
 ): Promise<{ data: Minute | null; error: PostgrestError | null }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError };
+  if (authError || !user) return { data: null, error: authError as unknown as PostgrestError | null };
 
   const { data, error } = await supabase
     .from("minutes")
@@ -151,7 +151,7 @@ export async function searchMinutes(
   query: string
 ): Promise<{ data: Minute[] | null; error: PostgrestError | null }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError };
+  if (authError || !user) return { data: null, error: authError as unknown as PostgrestError | null };
 
   const { data, error } = await supabase
     .from("minutes")
