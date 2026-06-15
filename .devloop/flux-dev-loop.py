@@ -86,9 +86,11 @@ def read_state() -> dict:
 
 
 def write_state(state: dict):
-    """Write state to the state file."""
+    """Atomically write state to the state file."""
     STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    STATE_FILE.write_text(json.dumps(state, indent=2, ensure_ascii=False))
+    tmp = STATE_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(state, indent=2, ensure_ascii=False))
+    tmp.replace(STATE_FILE)
 
 
 def load_queue() -> dict:
@@ -176,6 +178,59 @@ def start_opencode_server():
     log("Warning: opencode server did not become ready within 10s, continuing anyway...")
 
 
+def get_short_path(path: str) -> str:
+    """Get short 8.3 path on Windows (EISDIR workaround for Japanese chars).
+    On non-Windows systems, returns the path as-is.
+    """
+    if sys.platform != "win32":
+        return path
+    try:
+        import ctypes
+        buf = ctypes.create_unicode_buffer(260)
+        if ctypes.windll.kernel32.GetShortPathNameW(path, buf, 260):
+            short = buf.value
+            log(f"Short path: {path} \u2192 {short}")
+            return short
+    except (ImportError, AttributeError, Exception) as e:
+        log(f"Short path resolution failed: {e}, using original path")
+    return path
+
+
+def kill_opencode_server():
+    """Kill any process listening on the opencode server port."""
+    log(f"Killing opencode server on port {OPENCODE_PORT}...")
+    if sys.platform == "win32":
+        try:
+            r = subprocess.run(
+                ["netstat", "-ano", "-p", "tcp"],
+                capture_output=True, text=True, timeout=10,
+            )
+            for line in r.stdout.splitlines():
+                if f"127.0.0.1:{OPENCODE_PORT}" in line and "LISTENING" in line:
+                    parts = line.strip().split()
+                    if parts:
+                        pid = parts[-1]
+                        subprocess.run(
+                            ["taskkill", "/F", "/PID", pid],
+                            capture_output=True, timeout=5,
+                        )
+                        log(f"Killed opencode server (PID {pid})")
+                        return
+            log(f"No process found listening on port {OPENCODE_PORT}.")
+        except Exception as e:
+            log(f"Failed to kill opencode server: {e}")
+    else:
+        try:
+            r = subprocess.run(
+                ["fuser", "-k", f"{OPENCODE_PORT}/tcp"],
+                capture_output=True, text=True, timeout=5,
+            )
+            if r.returncode == 0:
+                log("Killed opencode server via fuser.")
+        except Exception:
+            pass
+
+
 def pick_task(tasks: list, state: dict) -> dict | None:
     """Pick the next task to work on based on priority and state."""
     skipped = set(state.get("skipped_tasks", []))
@@ -207,7 +262,7 @@ Commit your changes when done. Report what you did.
     log(f"Running opencode for task {task_id}: {task_title}")
     try:
         result = subprocess.run(
-            [_OPENCODE_BIN, "run", "-m", prompt],
+            [_OPENCODE_BIN, "run", prompt],
             cwd=str(PROJECT_DIR),
             capture_output=True,
             text=True,
@@ -226,7 +281,7 @@ Commit your changes when done. Report what you did.
 
 def run_opencode_via_server(task_id: str, task_title: str, task_description: str) -> tuple[bool, str]:
     """Run opencode by connecting to the running server with --attach.
-    Falls back to run_opencode() if server is unavailable.
+    Falls back to run_opencode() if server is unavailable or specific errors occur.
     """
     prompt = f"""Implement task {task_id}: {task_title}
 
@@ -235,7 +290,10 @@ def run_opencode_via_server(task_id: str, task_title: str, task_description: str
 Write the code, test it, and commit. Report what was done."""
     log(f"Running task {task_id} via opencode server (attach :{OPENCODE_PORT})...")
 
-    prompt_file = PROJECT_DIR / ".devloop" / "prompts" / f"task-{task_id}.md"
+    # Sanitize task_id for use as a filename (Windows-safe, no colons/angle brackets/quotes, max length)
+    safe_name = re.sub(r'[<>:\"/\\|?*\'{}\[\] ;]', '_', task_id)
+    safe_name = safe_name.strip('._')[:120]  # truncate to stay under MAX_PATH
+    prompt_file = PROJECT_DIR / ".devloop" / "prompts" / f"task-{safe_name}.md"
     prompt_file.parent.mkdir(parents=True, exist_ok=True)
     prompt_file.write_text(prompt, encoding="utf-8")
 
@@ -251,6 +309,7 @@ Write the code, test it, and commit. Report what was done."""
                 "-p", password,
                 "-m", model,
                 "--dangerously-skip-permissions",
+                "--dir", get_short_path(str(PROJECT_DIR)),
                 task_title,
                 "-f", str(prompt_file),
             ],
@@ -261,6 +320,10 @@ Write the code, test it, and commit. Report what was done."""
         )
         output = result.stdout + result.stderr
         success = result.returncode == 0
+        # Handle known attach-mode failures by falling back to direct mode
+        if not success and ("Session not found" in output or "EISDIR" in output):
+            log(f"Server attach failed, falling back to direct mode...")
+            return run_opencode(task_id, task_title, task_description)
         return success, output
     except subprocess.TimeoutExpired:
         return False, f"TIMEOUT: Task {task_id} timed out after 10 minutes."
@@ -540,21 +603,30 @@ def main():
         log("Another flux process is already running. Exiting.")
         return "[SILENT]"
 
+    server_proc = None
     try:
         state = read_state()
         state["cycle"] = state.get("cycle", 0) + 1
         log(f"Cycle #{state['cycle']}")
 
-        # Crash recovery: reset running → pending
+        # Crash recovery: reset running → pending + reconcile skipped_tasks
         queue = load_queue()
         recovered = 0
         for t in queue["tasks"]:
             if t.get("status") == "running":
                 t["status"] = "pending"
                 recovered += 1
+        # Reconcile state.skipped_tasks with queue's actual skipped status
+        queue_skipped = {t["id"] for t in queue["tasks"] if t.get("status") == "skipped"}
+        state_skipped = set(state.get("skipped_tasks", []))
+        reconciled = list(queue_skipped | state_skipped)
+        if set(state.get("skipped_tasks", [])) != reconciled:
+            state["skipped_tasks"] = reconciled
+            log(f"Reconciled skipped_tasks: state({len(state_skipped)}) + queue({len(queue_skipped)}) = {len(reconciled)}")
         if recovered:
             log(f"Crash recovery: reset {recovered} running task(s) to pending")
             save_queue(queue)
+        write_state(state)
 
         tasks = queue.get("tasks", [])
 
@@ -578,19 +650,19 @@ def main():
                 return
             log(f"Auto-generate added {added} new task(s), now {pending_count} pending.")
 
-        # Check / start opencode server
-        server_proc = None
-        if not is_opencode_running():
-            log("opencode server not running, starting it...")
-            server_proc = start_opencode_server()
-        else:
-            log("opencode server is already running on port 8575.")
+        # Start fresh opencode server (kill any leftover, then start new)
+        if is_opencode_running():
+            log("Killing leftover opencode server before starting fresh...")
+            kill_opencode_server()
+            time.sleep(1)
+        server_proc = start_opencode_server()
 
         # Pick a task
         task = pick_task(tasks, state)
         if task is None:
             report = "🔄 **Flux Dev Loop**\n\nAll tasks completed or skipped. Nothing to do."
             print(report)
+            write_state(state)
             return
 
         log(f"Picked task: {task.get('id', 'N/A')} - {task.get('title', 'N/A')}")
@@ -602,11 +674,27 @@ def main():
         # Run the task
         task_title = task.get("title") or task.get("label", "")
         task_desc = task.get("description") or task.get("prompt", "")
-        success, output = run_opencode_via_server(
-            task.get("id", ""),
-            task_title,
-            task_desc,
-        )
+        try:
+            success, output = run_opencode_via_server(
+                task.get("id", ""),
+                task_title,
+                task_desc,
+            )
+        except OSError as e:
+            log(f"Task execution failed with OSError: {e}. Skipping task.")
+            success = False
+            output = f"Script error — task execution crashed: {e}"
+            # Count as a failure for retry logic
+            task["retries"] = task.get("retries", 0) + 1
+            if task["retries"] >= task.get("max_retries", 2):
+                task["status"] = "skipped"
+            else:
+                task["status"] = "pending"
+            save_queue(queue)
+            report = generate_report(success, task, output, state["cycle"])
+            print(report)
+            write_state(state)
+            return
 
         # Update task status
         if success:
@@ -635,11 +723,21 @@ def main():
         print(report)
 
         write_state(state)
-        log(f"State saved (success={success}, failures={state.get('consecutive_failures', 0)})")
+        log(f"State saved (success={success}, failures={state.get('consecutive_failures', 0)})\n")
 
     finally:
+        if server_proc:
+            log("Shutting down opencode server...")
+            server_proc.terminate()
+            try:
+                server_proc.wait(timeout=10)
+            except (subprocess.TimeoutExpired, ProcessLookupError):
+                try:
+                    server_proc.kill()
+                except Exception:
+                    pass
         release_lock()
-        log("Flux Dev Loop finished.")
+        log("Flux Dev Loop finished.\n")
 
 
 if __name__ == "__main__":

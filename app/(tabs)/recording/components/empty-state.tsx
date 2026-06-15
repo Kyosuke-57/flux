@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { EmptyState as CommonEmptyState } from "../../../../src/components/EmptyState";
 import type { ColorsLight } from "../../../../src/theme";
 
 type Props = {
@@ -9,45 +9,12 @@ type Props = {
 
 export function EmptyState({ color, onCreate }: Props) {
   return (
-    <View style={styles.centered}>
-      <Text style={[styles.title, { color: color.textPrimary }]}>
-        録音データがありません
-      </Text>
-      <Text style={[styles.subtext, { color: color.textSecondary }]}>
-        録音したデータがここに表示されます
-      </Text>
-      <TouchableOpacity
-        style={[styles.createLink, { backgroundColor: color.primary }]}
-        onPress={onCreate}
-      >
-        <Text style={[styles.createLinkText, { color: color.textInverse }]}>
-          + 新規作成
-        </Text>
-      </TouchableOpacity>
-    </View>
+    <CommonEmptyState
+      title="録音データがありません"
+      subtext="録音したデータがここに表示されます"
+      actionLabel="+ 新規作成"
+      onAction={onCreate}
+      color={color}
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  centered: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 32,
-  },
-  title: { fontSize: 18, fontWeight: "600", textAlign: "center" },
-  subtext: {
-    fontSize: 14,
-    textAlign: "center",
-    marginTop: 8,
-    lineHeight: 20,
-    paddingHorizontal: 16,
-  },
-  createLink: {
-    marginTop: 20,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 12,
-  },
-  createLinkText: { fontWeight: "600", fontSize: 15 },
-});

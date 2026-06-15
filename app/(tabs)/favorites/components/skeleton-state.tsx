@@ -2,6 +2,7 @@ import React from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Skeleton } from "../../../../src/components/Skeleton";
+import { UnauthenticatedView as FeatureSkeletonUnauthenticatedView } from "../../../../src/components/FeatureSkeleton";
 import type { ColorsLight } from "../../../../src/theme";
 
 type Props = {
@@ -63,30 +64,15 @@ export function LoadingSkeleton({ color }: Props) {
 
 export function UnauthenticatedView({ color }: Props) {
   return (
-    <SafeAreaView
-      style={[styles.container, { backgroundColor: color.background }]}
-      edges={["top", "left", "right"]}
-    >
-      <View style={styles.centered}>
-        <Text style={[styles.emptyTitle, { color: color.textPrimary }]}>
-          サインインしてください
-        </Text>
-        <Text style={[styles.emptySubtext, { color: color.textSecondary }]}>
-          お気に入りの保存・表示にはログインが必要です。
-        </Text>
-      </View>
-    </SafeAreaView>
+    <FeatureSkeletonUnauthenticatedView
+      color={color}
+      message="お気に入りの保存・表示にはログインが必要です。"
+    />
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  centered: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 32,
-  },
   headerPlaceholder: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -104,12 +90,5 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     gap: 4,
-  },
-  emptyTitle: { fontSize: 18, fontWeight: "600", textAlign: "center" },
-  emptySubtext: {
-    fontSize: 14,
-    textAlign: "center",
-    marginTop: 8,
-    lineHeight: 20,
   },
 });
