@@ -27,6 +27,7 @@ import { Spacing, BorderRadius, theme } from "../../src/theme";
 import { useSettings } from "../../src/contexts/SettingsContext";
 import { useToast } from "../../src/contexts/ToastContext";
 import { useFavorites } from "../../src/contexts/FavoritesContext";
+import { usePipeline } from "../../src/hooks/usePipeline";
 import { Skeleton } from "../../src/components/Skeleton";
 import { ActionSheet, type ActionSheetOption } from "../../src/components/ActionSheet";
 import { INDUSTRY_TEMPLATES } from "../../src/data/industry-templates";
@@ -68,6 +69,7 @@ export default function MinuteDetailScreen() {
   const player = useAudioPlayer(recordingPathState ?? null, { updateInterval: 250 });
   const playerStatus = useAudioPlayerStatus(player);
   const toast = useToast();
+  const { status, startPipeline } = usePipeline();
   const { isFavorited, toggle: toggleFavorite } = useFavorites();
   const currentFavorited = id ? isFavorited(id) : false;
 
@@ -222,8 +224,7 @@ export default function MinuteDetailScreen() {
     if (!uri) return;
     setTranscribing(true);
     try {
-      const { pipelineManager } = await import("../../src/services/pipeline-manager");
-      await pipelineManager.startPipeline(uri, templateContentRef.current ?? undefined);
+      await startPipeline(uri, templateContentRef.current ?? undefined, "manual");
 
       setContent((prev) =>
         prev
@@ -234,7 +235,13 @@ export default function MinuteDetailScreen() {
       Alert.alert("文字起こしエラー", e instanceof Error ? e.message : "音声の文字起こしに失敗しました。");
       setTranscribing(false);
     }
-  }, [recordingUri, recordingPath, recordingPathState]);
+  }, [recordingUri, recordingPath, recordingPathState, startPipeline]);
+
+  useEffect(() => {
+    if (status === "completed" || status === "failed") {
+      setTranscribing(false);
+    }
+  }, [status]);
 
   const handleSave = useCallback(async (skipEmptyCheck?: boolean) => {
     const hasContent = content.trim() || correctedTranscript.trim() || originalTranscript.trim();
