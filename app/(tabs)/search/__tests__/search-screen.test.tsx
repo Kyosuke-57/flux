@@ -209,8 +209,10 @@ describe("SearchScreen", () => {
     });
 
     // LoadingSkeleton は文字列モック → "LoadingSkeleton" ホスト要素
-    const skeletons = findAllByType(renderer.root, "LoadingSkeleton");
-    expect(skeletons.length).toBeGreaterThanOrEqual(1);
+    await vi.waitFor(() => {
+      const skeletons = findAllByType(renderer.root, "LoadingSkeleton");
+      expect(skeletons.length).toBeGreaterThanOrEqual(1);
+    });
 
     resolveSearch({ data: [], error: null });
   });
