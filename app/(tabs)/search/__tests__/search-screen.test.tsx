@@ -209,8 +209,10 @@ describe("SearchScreen", () => {
     });
 
     // LoadingSkeleton は文字列モック → "LoadingSkeleton" ホスト要素
-    const skeletons = findAllByType(renderer.root, "LoadingSkeleton");
-    expect(skeletons.length).toBeGreaterThanOrEqual(1);
+    await vi.waitFor(() => {
+      const skeletons = findAllByType(renderer.root, "LoadingSkeleton");
+      expect(skeletons.length).toBeGreaterThanOrEqual(1);
+    });
 
     resolveSearch({ data: [], error: null });
   });
@@ -234,7 +236,14 @@ describe("SearchScreen", () => {
     await vi.waitFor(() => {
       const allTexts = findAllByType(renderer.root, "Text");
       expect(allTexts.find((t) => t.children?.[0] === "該当する結果がありません")).toBeDefined();
-      expect(allTexts.find((t) => t.children?.[0] === "キーワードを変えてみてください")).toBeDefined();
+      // 共通EmptyStateではsubtextが1つの文字列に結合されている
+      expect(
+        allTexts.find(
+          (t) =>
+            typeof t.children?.[0] === "string" &&
+            (t.children[0] as string).includes("キーワードを変えてみてください"),
+        ),
+      ).toBeDefined();
     });
   });
 

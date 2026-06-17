@@ -1,43 +1,25 @@
-import React, { useEffect, useRef } from "react";
-import { View, Animated, StyleSheet } from "react-native";
+import React from "react";
+import { View, StyleSheet } from "react-native";
+import { Skeleton } from "../../../../src/components/Skeleton";
+import { UnauthenticatedView as CommonUnauthenticatedView } from "../../../../src/components/FeatureSkeleton";
 import type { ColorsLight } from "../../../../src/theme";
 
-type Props = {
-  color: typeof ColorsLight;
-};
+type Props = { color: typeof ColorsLight };
 
 export function LoadingSkeleton({ color }: Props) {
-  const opacity = useRef(new Animated.Value(0.3)).current;
-
-  useEffect(() => {
-    const anim = Animated.loop(
-      Animated.sequence([
-        Animated.timing(opacity, {
-          toValue: 1,
-          duration: 800,
-          useNativeDriver: true,
-        }),
-        Animated.timing(opacity, {
-          toValue: 0.3,
-          duration: 800,
-          useNativeDriver: true,
-        }),
-      ]),
-    );
-    anim.start();
-    return () => anim.stop();
-  }, [opacity]);
-
   return (
     <View style={[styles.container, { backgroundColor: color.background }]}>
       {[1, 2, 3, 4, 5].map((i) => (
-        <Animated.View
+        <View
           key={i}
           style={[
             styles.skeleton,
-            { backgroundColor: color.surfaceSecondary, opacity },
+            { backgroundColor: color.surfaceSecondary },
           ]}
-        />
+        >
+          <Skeleton width="65%" height={14} borderRadius={6} />
+          <Skeleton width={50} height={12} borderRadius={4} />
+        </View>
       ))}
     </View>
   );
@@ -45,9 +27,10 @@ export function LoadingSkeleton({ color }: Props) {
 
 export function UnauthenticatedView({ color }: Props) {
   return (
-    <View style={[styles.container, styles.centered]}>
-      {/* 実際の未認証ビューは検索画面では簡略化 — ミニマル表示 */}
-    </View>
+    <CommonUnauthenticatedView
+      color={color}
+      message="検索機能をご利用いただくにはログインが必要です。"
+    />
   );
 }
 
@@ -57,12 +40,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 16,
   },
-  centered: {
-    justifyContent: "center",
-    alignItems: "center",
-  },
   skeleton: {
-    height: 80,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 16,
     borderRadius: 12,
     marginBottom: 12,
   },
