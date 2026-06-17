@@ -76,7 +76,7 @@ export default function TabLayout() {
             intensity={50}
             tint={settings.isDarkMode ? "dark" : "light"}
             style={{
-              ...StyleSheet.absoluteFillObject,
+              ...StyleSheet.absoluteFill,
               borderTopWidth: 1,
               borderTopColor: settings.isDarkMode
                 ? "rgba(148, 163, 184, 0.12)"

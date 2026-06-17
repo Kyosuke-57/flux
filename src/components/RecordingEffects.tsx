@@ -122,7 +122,7 @@ export function PulseEffect({ color, isActive, volume = 0 }: PulseEffectProps) {
 
 const styles = StyleSheet.create({
   fullscreenContainer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: "center",
     alignItems: "center",
   },

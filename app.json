@@ -21,7 +21,11 @@
         {
           "microphonePermission": "録音のために FLUX がマイクにアクセスすることを許可してください。"
         }
-      ]
+      ],
+      "@stripe/stripe-react-native",
+      "expo-sharing",
+      "expo-status-bar",
+      "expo-web-browser"
     ],
     "ios": {
       "supportsTablet": true,

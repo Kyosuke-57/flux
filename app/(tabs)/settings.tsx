@@ -749,7 +749,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   modalBackdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   modalContent: {
     width: "88%",

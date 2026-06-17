@@ -472,7 +472,7 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   effectLayer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: "center",
     alignItems: "center",
   },
