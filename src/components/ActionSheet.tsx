@@ -5,7 +5,7 @@ import {
   TouchableOpacity,
   Animated,
   StyleSheet,
-  Dimensions,
+  useWindowDimensions,
   Modal,
   Pressable,
 } from "react-native";
@@ -31,8 +31,6 @@ interface ActionSheetProps {
   onClose?: () => void;
 }
 
-const SCREEN_HEIGHT = Dimensions.get("window").height;
-
 export function ActionSheet({
   visible,
   title,
@@ -41,6 +39,7 @@ export function ActionSheet({
   onCancel,
   onClose,
 }: ActionSheetProps) {
+  const { height: SCREEN_HEIGHT } = useWindowDimensions();
   const { settings } = useSettings();
   const isDarkMode = settings.isDarkMode;
   const c = theme(isDarkMode);

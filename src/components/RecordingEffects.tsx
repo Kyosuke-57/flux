@@ -1,9 +1,5 @@
 import React, { useEffect, useRef } from "react";
-import { View, Animated, StyleSheet, Dimensions } from "react-native";
-
-const SCREEN_WIDTH = Dimensions.get("window").width;
-const SCREEN_HEIGHT = Dimensions.get("window").height;
-const SCREEN_MAX = Math.max(SCREEN_WIDTH, SCREEN_HEIGHT);
+import { View, Animated, StyleSheet, useWindowDimensions } from "react-native";
 
 interface WaveformEffectProps {
   color: string;
@@ -68,6 +64,8 @@ interface PulseEffectProps {
 }
 
 export function PulseEffect({ color, isActive, volume = 0 }: PulseEffectProps) {
+  const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions();
+  const SCREEN_MAX = Math.max(SCREEN_WIDTH, SCREEN_HEIGHT);
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
   const smoothScale = useRef(1);
