@@ -46,3 +46,24 @@ jobs:
 
       - name: Expo Export
         run: npx expo export
+
+  test:
+    name: Test (vitest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci --legacy-peer-deps
+
+      - name: Run tests
+        run: npm test
+
