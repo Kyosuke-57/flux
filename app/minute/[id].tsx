@@ -23,8 +23,8 @@ import { getAllTemplates } from "../../src/services/templates";
 import { getAllTags, createTag } from "../../src/services/tags";
 import { getAllFolders } from "../../src/services/folders";
 import type { Minute, Template, Tag, Folder } from "../../src/types";
-import { Spacing, BorderRadius, theme } from "../../src/theme";
-import { useSettings } from "../../src/contexts/SettingsContext";
+import { Spacing, BorderRadius } from "../../src/theme";
+import { useThemeColors } from "../../src/hooks/useThemeColors";
 import { useToast } from "../../src/contexts/ToastContext";
 import { useFavorites } from "../../src/contexts/FavoritesContext";
 import { usePipeline } from "../../src/hooks/usePipeline";
@@ -34,8 +34,7 @@ import { INDUSTRY_TEMPLATES } from "../../src/data/industry-templates";
 import { exportAndShareMinute, type ExportFormat } from "../../src/services/export";
 
 export default function MinuteDetailScreen() {
-  const { settings } = useSettings();
-  const c = theme(settings.isDarkMode);
+  const c = useThemeColors();
   const { id, recordingUri, recordingPath } = useLocalSearchParams<{
     id: string;
     recordingUri?: string;

@@ -3,8 +3,7 @@ import { FlatList, RefreshControl, StyleSheet, View, Text, TouchableOpacity } fr
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../../../src/contexts/AuthContext";
-import { useSettings } from "../../../src/contexts/SettingsContext";
-import { theme } from "../../../src/theme";
+import { useThemeColors } from "../../../src/hooks/useThemeColors";
 import {
   useTranscriptionJobsData,
   type StatusFilter,
@@ -32,8 +31,7 @@ const SORT_OPTIONS: { key: SortField; label: string }[] = [
 ];
 
 export default function TranscriptionJobsScreen() {
-  const { settings } = useSettings();
-  const c = theme(settings.isDarkMode);
+  const c = useThemeColors();
   const { user } = useAuth();
 
   const {

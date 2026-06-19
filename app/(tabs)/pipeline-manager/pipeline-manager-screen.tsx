@@ -11,8 +11,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../../../src/contexts/AuthContext";
-import { useSettings } from "../../../src/contexts/SettingsContext";
-import { theme, Spacing } from "../../../src/theme";
+import { useThemeColors } from "../../../src/hooks/useThemeColors";
+import { Spacing } from "../../../src/theme";
 import { usePipelineData } from "./hooks/use-pipeline-data";
 import { PipelineCard } from "./components/pipeline-card";
 import { EmptyState } from "./components/empty-state";
@@ -25,8 +25,7 @@ import {
 } from "./hooks/utils";
 
 export default function PipelineManagerScreen() {
-  const { settings } = useSettings();
-  const c = theme(settings.isDarkMode);
+  const c = useThemeColors();
   const { user } = useAuth();
 
   const {

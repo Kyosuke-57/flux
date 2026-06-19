@@ -14,13 +14,12 @@ import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { signIn, signUp, signInWithGoogle } from "../../src/services/auth";
 import { useAuth } from "../../src/contexts/AuthContext";
-import { Spacing, BorderRadius, Shadows, theme } from "../../src/theme";
+import { Spacing, BorderRadius, Shadows } from "../../src/theme";
 import { useHaptics, useBounce, FadeInView } from "../../src/animations";
-import { useSettings } from "../../src/contexts/SettingsContext";
+import { useThemeColors } from "../../src/hooks/useThemeColors";
 
 export default function LoginScreen() {
-  const { settings } = useSettings();
-  const c = theme(settings.isDarkMode);
+  const c = useThemeColors();
   const haptics = useHaptics();
   const submitBtn = useBounce({ scaleIn: 0.95 });
   const googleBtn = useBounce({ scaleIn: 0.95 });

@@ -7,8 +7,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "../../../src/contexts/AuthContext";
-import { useSettings } from "../../../src/contexts/SettingsContext";
-import { theme, Spacing, BorderRadius, Shadows } from "../../../src/theme";
+import { Spacing, BorderRadius, Shadows } from "../../../src/theme";
+import { useThemeColors } from "../../../src/hooks/useThemeColors";
 import { GlassCard } from "../../../src/components/Glass";
 import { FadeInView, useHaptics } from "../../../src/animations";
 import { HomeScreenSkeleton } from "../../../src/components/Skeleton";
@@ -30,8 +30,7 @@ function secondsToHms(s: number) {
 
 export default function DashboardScreen() {
   const { user, isLoading: authLoading } = useAuth();
-  const { settings } = useSettings();
-  const c = theme(settings.isDarkMode);
+  const c = useThemeColors();
   const haptics = useHaptics();
 
   const [data, setData] = useState<Awaited<ReturnType<typeof getDashboardData>> | null>(null);

@@ -3,8 +3,7 @@ import { FlatList, RefreshControl, TouchableOpacity, StyleSheet, View, Text } fr
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../../../src/contexts/AuthContext";
-import { useSettings } from "../../../src/contexts/SettingsContext";
-import { theme } from "../../../src/theme";
+import { useThemeColors } from "../../../src/hooks/useThemeColors";
 import { useTagsData } from "./hooks/use-tags-data";
 import { TagCard } from "./components/tag-card";
 import { TagFormModal } from "./components/tag-form-modal";
@@ -13,8 +12,7 @@ import { EmptyState } from "./components/empty-state";
 import { LoadingSkeleton } from "./components/skeleton-state";
 
 export default function TagsScreen() {
-  const { settings } = useSettings();
-  const c = theme(settings.isDarkMode);
+  const c = useThemeColors();
   const { user } = useAuth();
 
   const {

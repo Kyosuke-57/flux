@@ -7,7 +7,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../src/contexts/AuthContext";
-import { useSettings } from "../src/contexts/SettingsContext";
 import { useToast } from "../src/contexts/ToastContext";
 import {
   getAllTemplates,
@@ -16,12 +15,12 @@ import {
   deleteTemplate,
 } from "../src/services/templates";
 import type { Template } from "../src/types";
-import { theme, Shadows } from "../src/theme";
+import { Shadows } from "../src/theme";
+import { useThemeColors } from "../src/hooks/useThemeColors";
 import { GlassCard } from "../src/components/Glass";
 
 export default function TemplatesScreen() {
-  const { settings } = useSettings();
-  const c = theme(settings.isDarkMode);
+  const c = useThemeColors();
   const { user } = useAuth();
   const toast = useToast();
 

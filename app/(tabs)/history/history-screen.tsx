@@ -3,12 +3,12 @@ import {
   View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet,
   RefreshControl, ActivityIndicator,
 } from "react-native";
+import { useThemeColors } from "../../../src/hooks/useThemeColors";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "../../../src/contexts/AuthContext";
-import { useSettings } from "../../../src/contexts/SettingsContext";
-import { theme, Spacing, BorderRadius, Shadows } from "../../../src/theme";
+import { Spacing, BorderRadius, Shadows } from "../../../src/theme";
 import { GlassCard } from "../../../src/components/Glass";
 import { FadeInView, useHaptics } from "../../../src/animations";
 import { HomeScreenSkeleton } from "../../../src/components/Skeleton";
@@ -88,7 +88,7 @@ function getActivityIcon(type: ActivityType): IoniconName {
   }
 }
 
-function getStatusColor(status: string | undefined, c: ReturnType<typeof theme>): string {
+function getStatusColor(status: string | undefined, c: ReturnType<typeof useThemeColors>): string {
   switch (status) {
     case "completed":
     case "transcribed":
@@ -111,7 +111,7 @@ function ActivityCard({
   onPress,
 }: {
   item: ActivityItem;
-  color: ReturnType<typeof theme>;
+  color: ReturnType<typeof useThemeColors>;
   onPress: (item: ActivityItem) => void;
 }) {
   const statusLabel = getActivityStatusLabel(item.status);
@@ -172,7 +172,7 @@ function SectionHeader({
   color: c,
 }: {
   title: string;
-  color: ReturnType<typeof theme>;
+  color: ReturnType<typeof useThemeColors>;
 }) {
   return (
     <View style={styles.sectionHeader}>
@@ -185,7 +185,7 @@ function SectionHeader({
 
 // ─── 空状態 ───────────────────────────────────────────────
 
-function EmptyStateView({ color: c }: { color: ReturnType<typeof theme> }) {
+function EmptyStateView({ color: c }: { color: ReturnType<typeof useThemeColors> }) {
   return (
     <View style={styles.emptyContainer}>
       <Ionicons name="time-outline" size={48} color={c.textMuted} />
@@ -201,7 +201,7 @@ function EmptyStateView({ color: c }: { color: ReturnType<typeof theme> }) {
 
 // ─── 未認証ビュー ─────────────────────────────────────────
 
-function UnauthenticatedView({ color: c }: { color: ReturnType<typeof theme> }) {
+function UnauthenticatedView({ color: c }: { color: ReturnType<typeof useThemeColors> }) {
   const haptics = useHaptics();
   return (
     <SafeAreaView
@@ -233,8 +233,7 @@ function UnauthenticatedView({ color: c }: { color: ReturnType<typeof theme> }) 
 
 export default function HistoryScreen() {
   const { user, isLoading: authLoading } = useAuth();
-  const { settings } = useSettings();
-  const c = theme(settings.isDarkMode);
+  const c = useThemeColors();
   const haptics = useHaptics();
 
   const [activities, setActivities] = useState<ActivityItem[]>([]);

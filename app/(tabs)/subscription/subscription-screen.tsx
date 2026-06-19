@@ -12,7 +12,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../../src/contexts/AuthContext";
 import { useSettings } from "../../../src/contexts/SettingsContext";
-import { theme } from "../../../src/theme";
+import { useThemeColors } from "../../../src/hooks/useThemeColors";
 import { useSubscriptionData } from "./hooks/use-subscription-data";
 import { PLANS } from "../../../src/services/subscription";
 import {
@@ -29,7 +29,7 @@ import { LoadingSkeleton } from "./components/skeleton-state";
 
 export default function SubscriptionScreen() {
   const { settings } = useSettings();
-  const c = theme(settings.isDarkMode);
+  const c = useThemeColors();
   const { user } = useAuth();
 
   const {

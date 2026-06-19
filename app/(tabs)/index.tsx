@@ -3,6 +3,7 @@ import {
   View, Text, TouchableOpacity, FlatList, StyleSheet,
   RefreshControl, ActivityIndicator,
 } from "react-native";
+import { useThemeColors } from "../../src/hooks/useThemeColors";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -10,9 +11,8 @@ import { useAuth } from "../../src/contexts/AuthContext";
 import { getAllMinutes } from "../../src/services/minutes";
 import { getSubscriptionStatus } from "../../src/services/subscription";
 import type { Minute } from "../../src/types";
-import { Colors, Spacing, BorderRadius, Shadows, theme } from "../../src/theme";
+import { Colors, Spacing, BorderRadius, Shadows } from "../../src/theme";
 import { useBounce, useHaptics, FadeInView, BounceInView } from "../../src/animations";
-import { useSettings } from "../../src/contexts/SettingsContext";
 import { HomeScreenSkeleton } from "../../src/components/Skeleton";
 import { GlassCard } from "../../src/components/Glass";
 
@@ -36,8 +36,7 @@ function secondsToHms(s: number) {
 
 export default function HomeScreen() {
   const { user, isLoading: authLoading } = useAuth();
-  const { settings } = useSettings();
-  const c = theme(settings.isDarkMode);
+  const c = useThemeColors();
   const haptics = useHaptics();
   const recordBtn = useBounce({ scaleIn: 0.95 });
 

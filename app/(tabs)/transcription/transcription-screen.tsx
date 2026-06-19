@@ -3,8 +3,7 @@ import { FlatList, RefreshControl, StyleSheet, View, Text, TouchableOpacity } fr
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../../../src/contexts/AuthContext";
-import { useSettings } from "../../../src/contexts/SettingsContext";
-import { theme } from "../../../src/theme";
+import { useThemeColors } from "../../../src/hooks/useThemeColors";
 import { useTranscriptionData, type StatusFilter, type SortField, type SortDirection } from "./hooks/use-transcription-data";
 import { TranscriptionCard } from "./components/transcription-card";
 import { EmptyState } from "./components/empty-state";
@@ -27,8 +26,7 @@ const SORT_OPTIONS: { key: SortField; label: string }[] = [
 ];
 
 export default function TranscriptionScreen() {
-  const { settings } = useSettings();
-  const c = theme(settings.isDarkMode);
+  const c = useThemeColors();
   const { user } = useAuth();
 
   const {

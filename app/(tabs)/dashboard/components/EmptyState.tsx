@@ -2,13 +2,12 @@ import React from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { theme, Spacing } from "../../../../src/theme";
+import { Spacing } from "../../../../src/theme";
 import { FadeInView, useHaptics } from "../../../../src/animations";
-import { useSettings } from "../../../../src/contexts/SettingsContext";
+import { useThemeColors } from "../../../../src/hooks/useThemeColors";
 
 export function EmptyState() {
-  const { settings } = useSettings();
-  const c = theme(settings.isDarkMode);
+  const c = useThemeColors();
   const haptics = useHaptics();
 
   return (

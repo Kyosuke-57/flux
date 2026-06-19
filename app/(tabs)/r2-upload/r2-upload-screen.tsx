@@ -11,8 +11,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../../src/contexts/AuthContext";
-import { useSettings } from "../../../src/contexts/SettingsContext";
-import { theme } from "../../../src/theme";
+import { useThemeColors } from "../../../src/hooks/useThemeColors";
 import { useR2UploadData } from "./hooks/use-r2-upload-data";
 import { R2UploadCard } from "./components/r2-upload-card";
 import { R2UploadFormModal } from "./components/r2-upload-form-modal";
@@ -20,8 +19,7 @@ import { EmptyState } from "./components/empty-state";
 import { LoadingSkeleton, UnauthenticatedView } from "./components/skeleton-state";
 
 export default function R2UploadScreen() {
-  const { settings } = useSettings();
-  const c = theme(settings.isDarkMode);
+  const c = useThemeColors();
   const { user } = useAuth();
 
   const {
@@ -139,7 +137,7 @@ function SearchBar({
 }: {
   value: string;
   onChangeText: (text: string) => void;
-  color: ReturnType<typeof theme>;
+  color: ReturnType<typeof useThemeColors>;
 }) {
   return (
     <View style={searchStyles.wrapper}>
@@ -191,7 +189,7 @@ function SortControl({
   sortOrder: "asc" | "desc";
   onSortByChange: (field: "date" | "name" | "status") => void;
   onSortOrderChange: (order: "asc" | "desc") => void;
-  color: ReturnType<typeof theme>;
+  color: ReturnType<typeof useThemeColors>;
 }) {
   const SORT_OPTIONS: { value: "date" | "name" | "status"; label: string }[] = [
     { value: "date", label: "日付" },
@@ -318,7 +316,7 @@ function SearchEmptyState({
   color,
   query,
 }: {
-  color: ReturnType<typeof theme>;
+  color: ReturnType<typeof useThemeColors>;
   query: string;
 }) {
   return (
@@ -358,7 +356,7 @@ function R2UploadHeader({
   count: number;
   total: number;
   onCreate: () => void;
-  color: ReturnType<typeof theme>;
+  color: ReturnType<typeof useThemeColors>;
 }) {
   return (
     <View style={headerStyles.row}>

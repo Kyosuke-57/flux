@@ -4,7 +4,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useFocusEffect } from "expo-router";
 import { useSettings } from "../../src/contexts/SettingsContext";
-import { theme, BorderRadius } from "../../src/theme";
+import { BorderRadius } from "../../src/theme";
+import { useThemeColors } from "../../src/hooks/useThemeColors";
 import { useHaptics, useBounce, useCelebration, BounceInView } from "../../src/animations";
 import { WaveformEffect, PulseEffect } from "../../src/components/RecordingEffects";
 import { importAudio } from "../../src/services/recording";
@@ -24,7 +25,7 @@ import type { Template } from "../../src/types";
 
 export default function RecordScreen() {
   const { settings } = useSettings();
-  const c = theme(settings.isDarkMode);
+  const c = useThemeColors();
   const haptics = useHaptics();
   const celebration = useCelebration();
   const recordBtn = useBounce({ scaleIn: 0.93, haptic: false });

@@ -4,12 +4,12 @@ import { BlurView } from "expo-blur";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useEffect, useRef } from "react";
-import { theme } from "../../src/theme";
 import { useSettings } from "../../src/contexts/SettingsContext";
+import { useThemeColors } from "../../src/hooks/useThemeColors";
 
 type IoniconName = React.ComponentProps<typeof Ionicons>["name"];
 
-function TabIcon({ icon, focused, c }: { icon: IoniconName; focused: boolean; c: ReturnType<typeof theme> }) {
+function TabIcon({ icon, focused, c }: { icon: IoniconName; focused: boolean; c: ReturnType<typeof useThemeColors> }) {
   const scale = useRef(new Animated.Value(focused ? 1 : 0.85)).current;
   const translateY = useRef(new Animated.Value(focused ? -4 : 0)).current;
 
@@ -57,7 +57,7 @@ function TabIcon({ icon, focused, c }: { icon: IoniconName; focused: boolean; c:
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
   const { settings } = useSettings();
-  const c = theme(settings.isDarkMode);
+  const c = useThemeColors();
   return (
     <Tabs
       screenOptions={{
@@ -172,13 +172,6 @@ export default function TabLayout() {
         options={{
           title: "認証",
           tabBarIcon: ({ focused }) => <TabIcon icon="key" focused={focused} c={c} />,
-        }}
-      />
-      <Tabs.Screen
-        name="auth-data"
-        options={{
-          title: "認証データ",
-          tabBarIcon: ({ focused }) => <TabIcon icon="shield-checkmark" focused={focused} c={c} />,
         }}
       />
       <Tabs.Screen

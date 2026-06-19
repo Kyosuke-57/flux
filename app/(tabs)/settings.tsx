@@ -26,7 +26,7 @@ import { getAllTemplates } from "../../src/services/templates";
 import { getAllFolders, createFolder, updateFolder, deleteFolder } from "../../src/services/folders";
 import { getAllTags, createTag, updateTag, deleteTag } from "../../src/services/tags";
 import type { Folder, Tag } from "../../src/types";
-import { theme } from "../../src/theme";
+import { useThemeColors } from "../../src/hooks/useThemeColors";
 
 function formatTime(seconds: number): string {
   const mins = Math.floor(seconds / 60);
@@ -48,7 +48,7 @@ export default function SettingsScreen() {
   const { user, isLoading: authLoading } = useAuth();
   const { settings, updateSetting } = useSettings();
   const toast = useToast();
-  const c = theme(settings.isDarkMode);
+  const c = useThemeColors();
 
   // Subscription state
   const [subscription, setSubscription] = useState<{

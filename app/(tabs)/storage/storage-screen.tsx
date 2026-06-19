@@ -10,8 +10,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../../src/contexts/AuthContext";
-import { useSettings } from "../../../src/contexts/SettingsContext";
-import { theme } from "../../../src/theme";
+import { useThemeColors } from "../../../src/hooks/useThemeColors";
 import { useStorageData } from "./hooks/use-storage-data";
 import { SearchBar } from "../minutes/components/search-bar";
 import { StorageCard } from "./components/storage-card";
@@ -21,8 +20,7 @@ import { EmptyState } from "./components/empty-state";
 import { LoadingSkeleton, UnauthenticatedView } from "./components/skeleton-state";
 
 export default function StorageScreen() {
-  const { settings } = useSettings();
-  const c = theme(settings.isDarkMode);
+  const c = useThemeColors();
   const { user } = useAuth();
 
   const {
@@ -136,7 +134,7 @@ function StorageHeader({
 }: {
   count: number;
   onCreate: () => void;
-  color: ReturnType<typeof theme>;
+  color: ReturnType<typeof useThemeColors>;
 }) {
   return (
     <View style={headerStyles.row}>

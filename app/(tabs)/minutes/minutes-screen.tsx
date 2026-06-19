@@ -3,8 +3,7 @@ import { FlatList, RefreshControl, StyleSheet, View, Alert } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { useAuth } from "../../../src/contexts/AuthContext";
-import { useSettings } from "../../../src/contexts/SettingsContext";
-import { theme } from "../../../src/theme";
+import { useThemeColors } from "../../../src/hooks/useThemeColors";
 import { useMinutesData } from "./hooks/use-minutes-data";
 import { SearchBar } from "./components/search-bar";
 import { FilterBar } from "./components/filter-bar";
@@ -20,8 +19,7 @@ import { exportAndShareMinute, type ExportFormat } from "../../../src/services/e
 import type { Minute } from "../../../src/types";
 
 export default function MinutesScreen() {
-  const { settings } = useSettings();
-  const c = theme(settings.isDarkMode);
+  const c = useThemeColors();
   const { user } = useAuth();
 
   const {

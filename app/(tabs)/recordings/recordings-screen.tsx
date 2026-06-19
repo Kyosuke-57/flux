@@ -12,8 +12,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../../src/contexts/AuthContext";
-import { useSettings } from "../../../src/contexts/SettingsContext";
-import { theme } from "../../../src/theme";
+import { useThemeColors } from "../../../src/hooks/useThemeColors";
 import { useRecordingsData } from "./hooks/use-recordings-data";
 import { RecordingCard } from "./components/recording-card";
 import { RecordingFormModal } from "./components/recording-form-modal";
@@ -23,8 +22,7 @@ import { sortRecordings } from "./hooks/utils";
 import type { SortKey, SortOrder } from "./hooks/utils";
 
 export default function RecordingsScreen() {
-  const { settings } = useSettings();
-  const c = theme(settings.isDarkMode);
+  const c = useThemeColors();
   const { user } = useAuth();
 
   const {

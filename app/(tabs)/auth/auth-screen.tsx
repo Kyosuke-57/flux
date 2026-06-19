@@ -1,10 +1,9 @@
 import React, { useMemo, useState } from "react";
 import { FlatList, RefreshControl, TouchableOpacity, StyleSheet, View, TextInput, Text } from "react-native";
+import { useThemeColors } from "../../../src/hooks/useThemeColors";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../../../src/contexts/AuthContext";
-import { useSettings } from "../../../src/contexts/SettingsContext";
-import { theme } from "../../../src/theme";
 import { useAuthData } from "./hooks/use-auth-data";
 import { AuthCard } from "./components/auth-card";
 import { EmptyState } from "./components/empty-state";
@@ -15,8 +14,7 @@ import { filterAuthData, sortAuthData } from "./hooks/utils";
 import type { SortField, SortDirection } from "./hooks/utils";
 
 export default function AuthScreen() {
-  const { settings } = useSettings();
-  const c = theme(settings.isDarkMode);
+  const c = useThemeColors();
   const { user } = useAuth();
 
   const {

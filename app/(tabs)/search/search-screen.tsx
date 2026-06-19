@@ -12,8 +12,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { useAuth } from "../../../src/contexts/AuthContext";
-import { useSettings } from "../../../src/contexts/SettingsContext";
-import { theme } from "../../../src/theme";
+import { useThemeColors } from "../../../src/hooks/useThemeColors";
 import {
   globalSearch,
   type SearchResultItem,
@@ -23,8 +22,7 @@ import { EmptyState } from "./components/empty-state";
 import { LoadingSkeleton, UnauthenticatedView } from "./components/skeleton-state";
 
 export default function SearchScreen() {
-  const { settings } = useSettings();
-  const c = theme(settings.isDarkMode);
+  const c = useThemeColors();
   const { user } = useAuth();
 
   type SortField = "date" | "name" | "status";
@@ -272,7 +270,7 @@ function SearchHeader({
   query: string;
   onChangeText: (text: string) => void;
   onClear: () => void;
-  color: ReturnType<typeof theme>;
+  color: ReturnType<typeof useThemeColors>;
 }) {
   return (
     <View style={[styles.searchWrapper, { backgroundColor: c.background }]}>
@@ -314,7 +312,7 @@ function SortBar({
   sortField: "date" | "name" | "status";
   sortDirection: "asc" | "desc";
   onFieldChange: (field: "date" | "name" | "status") => void;
-  color: ReturnType<typeof theme>;
+  color: ReturnType<typeof useThemeColors>;
 }) {
   const fields: { key: "date" | "name" | "status"; label: string }[] = [
     { key: "date", label: "日付" },

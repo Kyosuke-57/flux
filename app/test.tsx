@@ -1,10 +1,8 @@
 import { View, Text, StyleSheet } from "react-native";
-import { useSettings } from "../src/contexts/SettingsContext";
-import { theme } from "../src/theme";
+import { useThemeColors } from "../src/hooks/useThemeColors";
 
 export default function TestScreen() {
-  const { settings } = useSettings();
-  const c = theme(settings.isDarkMode);
+  const c = useThemeColors();
   return (
     <View style={[styles.container, { backgroundColor: c.background }]}>
       <Text style={[styles.text, { color: c.primary }]}>✅ Hermes Agent Test</Text>

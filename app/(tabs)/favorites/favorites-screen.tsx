@@ -12,17 +12,16 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../../../src/contexts/AuthContext";
-import { useSettings } from "../../../src/contexts/SettingsContext";
 import { useFavorites } from "../../../src/contexts/FavoritesContext";
-import { theme, Spacing, BorderRadius } from "../../../src/theme";
+import { Spacing, BorderRadius } from "../../../src/theme";
+import { useThemeColors } from "../../../src/hooks/useThemeColors";
 import { GlassCard } from "../../../src/components/Glass";
 import { useFavoritesData, type SortKey } from "./hooks/use-favorites-data";
 import { EmptyState } from "./components/empty-state";
 import { LoadingSkeleton, UnauthenticatedView } from "./components/skeleton-state";
 
 export default function FavoritesScreen() {
-  const { settings } = useSettings();
-  const c = theme(settings.isDarkMode);
+  const c = useThemeColors();
   const { user } = useAuth();
 
   const {

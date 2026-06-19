@@ -10,8 +10,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../../src/contexts/AuthContext";
-import { useSettings } from "../../../src/contexts/SettingsContext";
-import { theme } from "../../../src/theme";
+import { useThemeColors } from "../../../src/hooks/useThemeColors";
 import { useRecordingData } from "./hooks/use-recording-data";
 import { RecordingCard } from "./components/recording-card";
 import { RecordingFormModal } from "./components/recording-form-modal";
@@ -21,8 +20,7 @@ import { SortControls } from "./components/sort-controls";
 import { LoadingSkeleton, UnauthenticatedView } from "./components/skeleton-state";
 
 export default function RecordingScreen() {
-  const { settings } = useSettings();
-  const c = theme(settings.isDarkMode);
+  const c = useThemeColors();
   const { user } = useAuth();
 
   const {
@@ -137,7 +135,7 @@ function RecordingHeader({
   count: number;
   total?: number;
   onCreate: () => void;
-  color: ReturnType<typeof theme>;
+  color: ReturnType<typeof useThemeColors>;
 }) {
   const label =
     total !== undefined && count !== total

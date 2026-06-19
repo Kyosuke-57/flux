@@ -8,12 +8,12 @@ import {
   RefreshControl,
   TextInput,
 } from "react-native";
+import { useThemeColors } from "../../../src/hooks/useThemeColors";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useAuth } from "../../../src/contexts/AuthContext";
-import { useSettings } from "../../../src/contexts/SettingsContext";
-import { theme, Spacing, BorderRadius } from "../../../src/theme";
+import { Spacing, BorderRadius } from "../../../src/theme";
 import { GlassCard } from "../../../src/components/Glass";
 import { useCalendar, formatDateLabel, formatMinuteTime } from "./hooks/use-calendar";
 import { CalendarGrid } from "./components/calendar-grid";
@@ -24,7 +24,7 @@ function MinuteListItem({
   color,
 }: {
   item: Minute;
-  color: ReturnType<typeof theme>;
+  color: ReturnType<typeof useThemeColors>;
 }) {
   return (
     <TouchableOpacity
@@ -64,8 +64,7 @@ function MinuteListItem({
 }
 
 export default function CalendarScreen() {
-  const { settings } = useSettings();
-  const c = theme(settings.isDarkMode);
+  const c = useThemeColors();
   const { user } = useAuth();
 
   const {
