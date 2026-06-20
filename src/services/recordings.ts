@@ -1,5 +1,6 @@
 import { supabase, requireUser } from "../lib/supabase";
 import type { PostgrestError } from "@supabase/supabase-js";
+import { asPostgrestError } from "../lib/service-utils";
 import type { Recording } from "../types";
 
 /**
@@ -7,7 +8,7 @@ import type { Recording } from "../types";
  */
 export async function getAllRecordings(): Promise<{ data: Recording[] | null; error: PostgrestError | null }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError as unknown as PostgrestError | null };
+  if (authError || !user) return { data: null, error: asPostgrestError(authError, "Not authenticated") };
 
   const { data, error } = await supabase
     .from("recordings")
@@ -25,7 +26,7 @@ export async function getRecording(
   id: string,
 ): Promise<{ data: Recording | null; error: PostgrestError | null }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError as unknown as PostgrestError | null };
+  if (authError || !user) return { data: null, error: asPostgrestError(authError, "Not authenticated") };
 
   const { data, error } = await supabase
     .from("recordings")
@@ -44,7 +45,7 @@ export async function createRecording(
   input: Pick<Recording, "title" | "file_path" | "duration_seconds" | "transcribed">,
 ): Promise<{ data: Recording | null; error: PostgrestError | null }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError as unknown as PostgrestError | null };
+  if (authError || !user) return { data: null, error: asPostgrestError(authError, "Not authenticated") };
 
   const { data, error } = await supabase
     .from("recordings")
@@ -69,7 +70,7 @@ export async function updateRecording(
   updates: Partial<Pick<Recording, "title" | "file_path" | "duration_seconds" | "transcribed">>,
 ): Promise<{ data: Recording | null; error: PostgrestError | null }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError as unknown as PostgrestError | null };
+  if (authError || !user) return { data: null, error: asPostgrestError(authError, "Not authenticated") };
 
   const { data, error } = await supabase
     .from("recordings")
@@ -89,7 +90,7 @@ export async function deleteRecording(
   id: string,
 ): Promise<{ error: PostgrestError | null }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { error: authError as unknown as PostgrestError | null };
+  if (authError || !user) return { error: asPostgrestError(authError, "Not authenticated") };
 
   const { error } = await supabase
     .from("recordings")
@@ -107,7 +108,7 @@ export async function searchRecordings(
   query: string,
 ): Promise<{ data: Recording[] | null; error: PostgrestError | null }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError as unknown as PostgrestError | null };
+  if (authError || !user) return { data: null, error: asPostgrestError(authError, "Not authenticated") };
 
   const { data, error } = await supabase
     .from("recordings")

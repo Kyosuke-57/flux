@@ -1,6 +1,27 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// ---- Mock external packages (same pattern as templates.test.ts) ----
+// ---- Mock external packages (same pattern as minutes.test.ts) ----
+
+const { MockPostgrestError } = vi.hoisted(() => {
+  class MockPostgrestError extends Error {
+    details: string;
+    hint: string;
+    code: string;
+    constructor(context: {
+      message: string;
+      details: string;
+      hint: string;
+      code: string;
+    }) {
+      super(context.message);
+      this.name = "PostgrestError";
+      this.details = context.details;
+      this.hint = context.hint;
+      this.code = context.code;
+    }
+  }
+  return { MockPostgrestError };
+});
 
 vi.mock("@supabase/supabase-js", () => ({
   createClient: vi.fn(() => ({
@@ -14,6 +35,7 @@ vi.mock("@supabase/supabase-js", () => ({
       unsubscribe: vi.fn(),
     })),
   })),
+  PostgrestError: MockPostgrestError,
 }));
 
 vi.mock("@react-native-async-storage/async-storage", () => ({
@@ -114,7 +136,9 @@ describe("exports service", () => {
 
       const result = await getAllExports();
 
-      expect(result).toEqual({ data: null, error: authError });
+      expect(result.data).toBeNull();
+      expect(result.error).toBeInstanceOf(MockPostgrestError);
+      expect(result.error?.message).toBe("Not authenticated");
       expect(mockFrom).not.toHaveBeenCalled();
     });
 
@@ -145,7 +169,9 @@ describe("exports service", () => {
 
       const result = await getExport("export-1");
 
-      expect(result).toEqual({ data: null, error: authError });
+      expect(result.data).toBeNull();
+      expect(result.error).toBeInstanceOf(MockPostgrestError);
+      expect(result.error?.message).toBe("Not authenticated");
       expect(mockFrom).not.toHaveBeenCalled();
     });
 
@@ -205,7 +231,9 @@ describe("exports service", () => {
 
       const result = await createExport("会議録", "pdf");
 
-      expect(result).toEqual({ data: null, error: authError });
+      expect(result.data).toBeNull();
+      expect(result.error).toBeInstanceOf(MockPostgrestError);
+      expect(result.error?.message).toBe("Not authenticated");
       expect(mockFrom).not.toHaveBeenCalled();
     });
 
@@ -257,7 +285,9 @@ describe("exports service", () => {
 
       const result = await updateExport("export-1", { title: "test" });
 
-      expect(result).toEqual({ data: null, error: authError });
+      expect(result.data).toBeNull();
+      expect(result.error).toBeInstanceOf(MockPostgrestError);
+      expect(result.error?.message).toBe("Not authenticated");
       expect(mockFrom).not.toHaveBeenCalled();
     });
 
@@ -288,7 +318,9 @@ describe("exports service", () => {
 
       const result = await deleteExport("export-1");
 
-      expect(result).toEqual({ data: null, error: authError });
+      expect(result.data).toBeNull();
+      expect(result.error).toBeInstanceOf(MockPostgrestError);
+      expect(result.error?.message).toBe("Not authenticated");
       expect(mockFrom).not.toHaveBeenCalled();
     });
 

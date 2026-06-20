@@ -4,11 +4,33 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const mockGetUser = vi.hoisted(() => vi.fn());
 const mockFrom = vi.hoisted(() => vi.fn());
 
+const { MockPostgrestError } = vi.hoisted(() => {
+  class MockPostgrestError extends Error {
+    details: string;
+    hint: string;
+    code: string;
+    constructor(context: {
+      message: string;
+      details: string;
+      hint: string;
+      code: string;
+    }) {
+      super(context.message);
+      this.name = "PostgrestError";
+      this.details = context.details;
+      this.hint = context.hint;
+      this.code = context.code;
+    }
+  }
+  return { MockPostgrestError };
+});
+
 vi.mock("@supabase/supabase-js", () => ({
   createClient: vi.fn(() => ({
     auth: { getUser: mockGetUser },
     from: mockFrom,
   })),
+  PostgrestError: MockPostgrestError,
 }));
 
 vi.mock("@react-native-async-storage/async-storage", () => ({
@@ -110,7 +132,9 @@ describe("recordings", () => {
       const result = await getAllRecordings();
 
       expect(mockFrom).not.toHaveBeenCalled();
-      expect(result).toEqual({ data: null, error: authError });
+      expect(result.data).toBeNull();
+      expect(result.error).toBeInstanceOf(MockPostgrestError);
+      expect(result.error?.message).toBe("Not authenticated");
     });
   });
 
@@ -137,7 +161,9 @@ describe("recordings", () => {
       const result = await getRecording("rec1");
 
       expect(mockFrom).not.toHaveBeenCalled();
-      expect(result).toEqual({ data: null, error: authError });
+      expect(result.data).toBeNull();
+      expect(result.error).toBeInstanceOf(MockPostgrestError);
+      expect(result.error?.message).toBe("Not authenticated");
     });
   });
 
@@ -176,7 +202,9 @@ describe("recordings", () => {
       const result = await createRecording(input);
 
       expect(mockFrom).not.toHaveBeenCalled();
-      expect(result).toEqual({ data: null, error: authError });
+      expect(result.data).toBeNull();
+      expect(result.error).toBeInstanceOf(MockPostgrestError);
+      expect(result.error?.message).toBe("Not authenticated");
     });
   });
 
@@ -207,7 +235,9 @@ describe("recordings", () => {
       const result = await updateRecording("rec1", updates);
 
       expect(mockFrom).not.toHaveBeenCalled();
-      expect(result).toEqual({ data: null, error: authError });
+      expect(result.data).toBeNull();
+      expect(result.error).toBeInstanceOf(MockPostgrestError);
+      expect(result.error?.message).toBe("Not authenticated");
     });
   });
 
@@ -233,7 +263,8 @@ describe("recordings", () => {
       const result = await deleteRecording("rec1");
 
       expect(mockFrom).not.toHaveBeenCalled();
-      expect(result).toEqual({ error: authError });
+      expect(result.error).toBeInstanceOf(MockPostgrestError);
+      expect(result.error?.message).toBe("Not authenticated");
     });
   });
 
@@ -263,7 +294,9 @@ describe("recordings", () => {
       const result = await searchRecordings("会議");
 
       expect(mockFrom).not.toHaveBeenCalled();
-      expect(result).toEqual({ data: null, error: authError });
+      expect(result.data).toBeNull();
+      expect(result.error).toBeInstanceOf(MockPostgrestError);
+      expect(result.error?.message).toBe("Not authenticated");
     });
   });
 });

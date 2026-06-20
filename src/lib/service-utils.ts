@@ -1,20 +1,10 @@
 import { requireUser } from "./supabase";
-
-/**
- * PostgrestError 互換のエラーオブジェクト。
- * @supabase/supabase-js への依存を排除するため、独自に定義する。
- */
-export interface PostgrestErrorLike extends Error {
-  message: string;
-  details: string;
-  hint: string;
-  code: string;
-}
+import { PostgrestError } from "@supabase/supabase-js";
 
 /**
  * requireUser() のラッパー。認証状態に応じて以下のいずれかを返す：
  * - 認証成功時: { user, error: null }
- * - 認証失敗時: { user: null, error: PostgrestErrorLike }
+ * - 認証失敗時: { user: null, error: PostgrestError }
  *
  * 呼び出し側での使用パターン:
  *   const { user, error } = await requireUserOrError();
@@ -22,30 +12,30 @@ export interface PostgrestErrorLike extends Error {
  *   // 以降 user を使って安全に DB 操作ができる
  */
 export async function requireUserOrError(): Promise<
-  { user: import("./supabase").User; error: null } | { user: null; error: PostgrestErrorLike }
+  { user: import("./supabase").User; error: null } | { user: null; error: PostgrestError }
 > {
   const { user, error: authError } = await requireUser();
   if (authError || !user) {
-    return {
-      user: null,
-      error: (authError ?? new Error("Not authenticated")) as PostgrestErrorLike,
-    };
+    const error = asPostgrestError(authError ?? new Error("Not authenticated"), "Not authenticated")!;
+    return { user: null, error };
   }
   return { user, error: null };
 }
 
 /**
- * Error オブジェクトを PostgrestErrorLike に変換する。
+ * Error オブジェクトを PostgrestError に変換する。
  * requireUser() の認証エラーや try/catch の例外をサービス層で一貫して扱うために使用。
  *
  * @param err - 変換元のエラー（null の場合は null を返す）
- * @returns PostgrestErrorLike または null
+ * @param fallbackMessage - err.message が falsy な場合の代替メッセージ
+ * @returns PostgrestError または null
  */
-export function asPostgrestError(err: Error | null): PostgrestErrorLike | null {
+export function asPostgrestError(err: Error | null, fallbackMessage = "Not authenticated"): PostgrestError | null {
   if (!err) return null;
-  const e = new Error(err.message) as PostgrestErrorLike;
-  e.details = "";
-  e.hint = "";
-  e.code = "AUTH_ERROR";
-  return e;
+  return new PostgrestError({
+    message: err.message ?? fallbackMessage,
+    details: "",
+    hint: "",
+    code: "AUTH_ERROR",
+  });
 }

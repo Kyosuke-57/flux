@@ -1,5 +1,6 @@
 import { supabase, requireUser } from "../lib/supabase";
 import type { PostgrestError } from "@supabase/supabase-js";
+import { asPostgrestError } from "../lib/service-utils";
 import type { ExportItem } from "../types";
 
 /**
@@ -10,7 +11,7 @@ export async function getAllExports(): Promise<{
   error: PostgrestError | null;
 }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError as unknown as PostgrestError | null };
+  if (authError || !user) return { data: null, error: asPostgrestError(authError, "Not authenticated") };
 
   const { data, error } = await supabase
     .from("exports")
@@ -28,7 +29,7 @@ export async function getExport(
   id: string,
 ): Promise<{ data: ExportItem | null; error: PostgrestError | null }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError as unknown as PostgrestError | null };
+  if (authError || !user) return { data: null, error: asPostgrestError(authError, "Not authenticated") };
 
   const { data, error } = await supabase
     .from("exports")
@@ -53,7 +54,7 @@ export async function createExport(
   minute_id?: string,
 ): Promise<{ data: ExportItem | null; error: PostgrestError | null }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError as unknown as PostgrestError | null };
+  if (authError || !user) return { data: null, error: asPostgrestError(authError, "Not authenticated") };
 
   const { data, error } = await supabase
     .from("exports")
@@ -77,7 +78,7 @@ export async function updateExport(
   updates: Partial<Pick<ExportItem, "title" | "format" | "minute_id">>,
 ): Promise<{ data: ExportItem | null; error: PostgrestError | null }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError as unknown as PostgrestError | null };
+  if (authError || !user) return { data: null, error: asPostgrestError(authError, "Not authenticated") };
 
   const { data, error } = await supabase
     .from("exports")
@@ -97,7 +98,7 @@ export async function deleteExport(
   id: string,
 ): Promise<{ data: ExportItem | null; error: PostgrestError | null }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError as unknown as PostgrestError | null };
+  if (authError || !user) return { data: null, error: asPostgrestError(authError, "Not authenticated") };
 
   const { data, error } = await supabase
     .from("exports")
