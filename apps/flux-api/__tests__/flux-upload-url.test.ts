@@ -132,4 +132,76 @@ describe("POST /api/flux-upload-url", () => {
     expect(response.status).toBe(500);
     expect(data).toEqual({ error: "署名付きURLの生成に失敗しました" });
   });
+
+  it("POST returns 400 when filename missing", async () => {
+    vi.mocked(getUser).mockResolvedValue({
+      user: { id: "user-123", email: "test@example.com" },
+    });
+
+    const req = createMockRequest(
+      { mimeType: "audio/mpeg", fileSize: 4096 },
+      "Bearer valid-jwt",
+    );
+
+    const response = await POST(req);
+    const data = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(data).toEqual({ error: "filename, mimeType, fileSize は必須です" });
+    expect(generateUploadUrl).not.toHaveBeenCalled();
+  });
+
+  it("POST returns 400 when fileSize missing", async () => {
+    vi.mocked(getUser).mockResolvedValue({
+      user: { id: "user-123", email: "test@example.com" },
+    });
+
+    const req = createMockRequest(
+      { filename: "recording.m4a", mimeType: "audio/mpeg" },
+      "Bearer valid-jwt",
+    );
+
+    const response = await POST(req);
+    const data = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(data).toEqual({ error: "filename, mimeType, fileSize は必須です" });
+    expect(generateUploadUrl).not.toHaveBeenCalled();
+  });
+
+  it("POST returns 400 when invalid audio type", async () => {
+    vi.mocked(getUser).mockResolvedValue({
+      user: { id: "user-123", email: "test@example.com" },
+    });
+    vi.mocked(isValidAudioType).mockReturnValue(false);
+
+    const req = createMockRequest(
+      { filename: "doc.pdf", mimeType: "application/pdf", fileSize: 4096 },
+      "Bearer valid-jwt",
+    );
+
+    const response = await POST(req);
+    const data = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(data).toEqual({ error: "サポートされていない音声形式です" });
+    expect(generateUploadUrl).not.toHaveBeenCalled();
+  });
+
+  it("POST returns 500 on JSON parse error", async () => {
+    vi.mocked(getUser).mockResolvedValue({
+      user: { id: "user-123", email: "test@example.com" },
+    });
+
+    const req = {
+      json: vi.fn().mockRejectedValue(new Error("Invalid JSON")),
+      headers: { get: () => "Bearer valid-jwt" },
+    };
+
+    const response = await POST(req as any);
+    const data = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(data).toEqual({ error: "署名付きURLの生成に失敗しました" });
+  });
 });

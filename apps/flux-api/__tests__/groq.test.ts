@@ -165,6 +165,19 @@ describe("refineJapaneseTranscript", () => {
     expect(result).toBe("補正されたテキスト");
     expect(mockFetch).toHaveBeenCalledTimes(1);
   });
+
+  it("throws on API error", async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      statusText: "Internal Server Error",
+    });
+    vi.stubGlobal("fetch", mockFetch);
+
+    await expect(
+      refineJapaneseTranscript("元のテキスト"),
+    ).rejects.toThrow();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -224,5 +237,18 @@ describe("generateMinutesFromTranscript", () => {
     expect(result.actionItems).toHaveLength(2);
     expect(result.actionItems[0]).toBe("予算案を作成する（担当者: 佐藤）");
     expect(result.actionItems[1]).toBe("レビュー会を設定する（担当者: 鈴木）");
+  });
+
+  it("throws on API error", async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 429,
+      statusText: "Too Many Requests",
+    });
+    vi.stubGlobal("fetch", mockFetch);
+
+    await expect(
+      generateMinutesFromTranscript("テスト文字起こし"),
+    ).rejects.toThrow();
   });
 });
