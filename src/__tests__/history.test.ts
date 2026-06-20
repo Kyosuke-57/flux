@@ -2,6 +2,27 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // ---- Mock external packages (same pattern as minutes.test.ts) ----
 
+const { MockPostgrestError } = vi.hoisted(() => {
+  class MockPostgrestError extends Error {
+    details: string;
+    hint: string;
+    code: string;
+    constructor(context: {
+      message: string;
+      details: string;
+      hint: string;
+      code: string;
+    }) {
+      super(context.message);
+      this.name = "PostgrestError";
+      this.details = context.details;
+      this.hint = context.hint;
+      this.code = context.code;
+    }
+  }
+  return { MockPostgrestError };
+});
+
 vi.mock("@supabase/supabase-js", () => ({
   createClient: vi.fn(() => ({
     auth: {
@@ -14,6 +35,7 @@ vi.mock("@supabase/supabase-js", () => ({
       unsubscribe: vi.fn(),
     })),
   })),
+  PostgrestError: MockPostgrestError,
 }));
 
 vi.mock("@react-native-async-storage/async-storage", () => ({
@@ -287,7 +309,9 @@ describe("getAllActivities", () => {
 
     const result = await getAllActivities();
 
-    expect(result).toEqual({ data: null, error: authError });
+    expect(result.data).toBeNull();
+    expect(result.error).toBeInstanceOf(MockPostgrestError);
+    expect(result.error?.message).toBe("Not authenticated");
     expect(mockFrom).not.toHaveBeenCalled();
   });
 

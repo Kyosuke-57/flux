@@ -1,6 +1,27 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// ---- Mock external packages (same pattern as folders.test.ts) ----
+// ---- Mock external packages (same pattern as minutes.test.ts) ----
+
+const { MockPostgrestError } = vi.hoisted(() => {
+  class MockPostgrestError extends Error {
+    details: string;
+    hint: string;
+    code: string;
+    constructor(context: {
+      message: string;
+      details: string;
+      hint: string;
+      code: string;
+    }) {
+      super(context.message);
+      this.name = "PostgrestError";
+      this.details = context.details;
+      this.hint = context.hint;
+      this.code = context.code;
+    }
+  }
+  return { MockPostgrestError };
+});
 
 vi.mock("@supabase/supabase-js", () => ({
   createClient: vi.fn(() => ({
@@ -14,6 +35,7 @@ vi.mock("@supabase/supabase-js", () => ({
       unsubscribe: vi.fn(),
     })),
   })),
+  PostgrestError: MockPostgrestError,
 }));
 
 vi.mock("@react-native-async-storage/async-storage", () => ({
@@ -120,7 +142,9 @@ describe("favorites service", () => {
 
       const result = await getAllFavorites();
 
-      expect(result).toEqual({ data: null, error: authError });
+      expect(result.data).toBeNull();
+      expect(result.error).toBeInstanceOf(MockPostgrestError);
+      expect(result.error?.message).toBe("Not authenticated");
       expect(mockFrom).not.toHaveBeenCalled();
     });
   });
@@ -159,7 +183,9 @@ describe("favorites service", () => {
 
       const result = await getFavoriteIds();
 
-      expect(result).toEqual({ data: null, error: authError });
+      expect(result.data).toBeNull();
+      expect(result.error).toBeInstanceOf(MockPostgrestError);
+      expect(result.error?.message).toBe("Not authenticated");
       expect(mockFrom).not.toHaveBeenCalled();
     });
   });
@@ -197,7 +223,9 @@ describe("favorites service", () => {
 
       const result = await toggleFavorite("minute-1");
 
-      expect(result).toEqual({ data: false, error: authError });
+      expect(result.data).toBe(false);
+      expect(result.error).toBeInstanceOf(MockPostgrestError);
+      expect(result.error?.message).toBe("Not authenticated");
       expect(mockFrom).not.toHaveBeenCalled();
     });
   });
@@ -240,7 +268,9 @@ describe("favorites service", () => {
 
       const result = await isFavorited("minute-1");
 
-      expect(result).toEqual({ data: false, error: authError });
+      expect(result.data).toBe(false);
+      expect(result.error).toBeInstanceOf(MockPostgrestError);
+      expect(result.error?.message).toBe("Not authenticated");
       expect(mockFrom).not.toHaveBeenCalled();
     });
   });

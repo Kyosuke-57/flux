@@ -1,5 +1,6 @@
 import { supabase, requireUser } from "../lib/supabase";
 import type { PostgrestError } from "@supabase/supabase-js";
+import { asPostgrestError } from "../lib/service-utils";
 import type { Favorite } from "../types";
 
 /**
@@ -10,7 +11,7 @@ export async function getAllFavorites(): Promise<{
   error: PostgrestError | null;
 }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError as unknown as PostgrestError | null };
+  if (authError || !user) return { data: null, error: asPostgrestError(authError, "Not authenticated") };
 
   const { data, error } = await supabase
     .from("favorites")
@@ -30,7 +31,7 @@ export async function getFavoriteIds(): Promise<{
   error: PostgrestError | null;
 }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: null, error: authError as unknown as PostgrestError | null };
+  if (authError || !user) return { data: null, error: asPostgrestError(authError, "Not authenticated") };
 
   const { data, error } = await supabase
     .from("favorites")
@@ -50,7 +51,7 @@ export async function toggleFavorite(
   minuteId: string
 ): Promise<{ data: boolean; error: PostgrestError | null }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: false, error: authError as unknown as PostgrestError | null };
+  if (authError || !user) return { data: false, error: asPostgrestError(authError, "Not authenticated") };
 
   // Check if already favorited
   const { data: existing } = await supabase
@@ -83,7 +84,7 @@ export async function isFavorited(
   minuteId: string
 ): Promise<{ data: boolean; error: PostgrestError | null }> {
   const { user, error: authError } = await requireUser();
-  if (authError || !user) return { data: false, error: authError as unknown as PostgrestError | null };
+  if (authError || !user) return { data: false, error: asPostgrestError(authError, "Not authenticated") };
 
   const { data, error } = await supabase
     .from("favorites")

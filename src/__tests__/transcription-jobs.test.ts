@@ -3,6 +3,27 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // ----- hoisted mock functions -----
 const mockGetUser = vi.hoisted(() => vi.fn());
 
+const { MockPostgrestError } = vi.hoisted(() => {
+  class MockPostgrestError extends Error {
+    details: string;
+    hint: string;
+    code: string;
+    constructor(context: {
+      message: string;
+      details: string;
+      hint: string;
+      code: string;
+    }) {
+      super(context.message);
+      this.name = "PostgrestError";
+      this.details = context.details;
+      this.hint = context.hint;
+      this.code = context.code;
+    }
+  }
+  return { MockPostgrestError };
+});
+
 // Supabaseクエリチェーンの結果をテストごとに差し替えられるようにする共有オブジェクト
 const mockFromResult = vi.hoisted(() => ({ data: null as any, error: null as any }));
 
@@ -25,6 +46,7 @@ vi.mock("@supabase/supabase-js", () => ({
         Promise.resolve(mockFromResult).then(onFulfilled),
     })),
   })),
+  PostgrestError: MockPostgrestError,
 }));
 
 vi.mock("@react-native-async-storage/async-storage", () => ({

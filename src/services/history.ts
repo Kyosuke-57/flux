@@ -7,6 +7,7 @@
  */
 import { supabase, requireUser } from "../lib/supabase";
 import type { PostgrestError } from "@supabase/supabase-js";
+import { asPostgrestError } from "../lib/service-utils";
 import type { Minute, Recording, TranscriptionJob, ExportItem } from "../types";
 
 // ─── 型定義 ───────────────────────────────────────────────
@@ -77,7 +78,7 @@ type AuthenticateUserResult =
 async function authenticateUser(): Promise<AuthenticateUserResult> {
   const { user, error: authError } = await requireUser();
   if (authError || !user)
-    return { error: authError as unknown as PostgrestError | Error | null };
+    return { error: asPostgrestError(authError, "Not authenticated") };
   return { user };
 }
 
