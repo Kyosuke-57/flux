@@ -8,5 +8,6 @@ export default defineConfig({
     environment: "node",
     setupFiles: ["./test/setup.ts"],
     include: ["**/*.test.{ts,tsx}", "**/__tests__/**/*.{ts,tsx}"],
+    exclude: ["apps/flux-api/**", "node_modules/**"],
   },
 });

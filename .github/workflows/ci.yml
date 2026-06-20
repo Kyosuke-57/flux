@@ -62,8 +62,16 @@ jobs:
           node-version: 22
           cache: npm
 
-      - run: npm ci --legacy-peer-deps
+      - name: Install root dependencies
+        run: npm ci --legacy-peer-deps
 
-      - name: Run tests
+      - name: Install flux-api dependencies
+        working-directory: apps/flux-api
+        run: npm ci --legacy-peer-deps
+
+      - name: Run tests (root)
         run: npm test
 
+      - name: Run tests (flux-api)
+        working-directory: apps/flux-api
+        run: npm test
