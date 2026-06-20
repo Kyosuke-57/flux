@@ -10,11 +10,16 @@
 - [ ] ドキュメント / Documentation
 - [ ] CI/CD / DevOps
 
-## テスト方法 / Test Plan
+## テスト結果 / Test Results
+
+```
+npm test:     xx passed / xx failed
+TS --noEmit:  xx errors
+```
 
 - [ ] Expo export が通る
 - [ ] lint エラーなし
-- [ ] 実機 or シミュレータで動作確認
+- [ ] TypeScript エラー0
 
 ## スクリーンショット（任意）
 

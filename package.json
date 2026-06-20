@@ -38,6 +38,8 @@
     "@types/react": "~19.2.14",
     "@types/react-test-renderer": "^19.1.0",
     "@vitejs/plugin-react": "^6.0.2",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
     "react-test-renderer": "^19.2.7",
     "typescript": "~6.0.3",
     "vitest": "^4.1.9"
@@ -48,7 +50,11 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "prepare": "husky"
   },
-  "private": true
+  "private": true,
+  "lint-staged": {
+    "*.{ts,tsx}": []
+  }
 }
