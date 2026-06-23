@@ -54,6 +54,9 @@ jobs:
       run:
         working-directory: .
 
+    env:
+      TZ: Asia/Tokyo
+
     steps:
       - uses: actions/checkout@v4
 

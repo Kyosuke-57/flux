@@ -207,6 +207,7 @@ export default function MinutesScreen() {
                     formatDate={(iso) => {
                       const d = new Date(iso);
                       return d.toLocaleDateString("ja-JP", {
+                        timeZone: "Asia/Tokyo",
                         month: "short",
                         day: "numeric",
                         hour: "2-digit",

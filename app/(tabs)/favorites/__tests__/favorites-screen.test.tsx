@@ -86,6 +86,7 @@ function sortFavorites(
 function formatDate(iso: string): string {
   const d = new Date(iso);
   return d.toLocaleDateString("ja-JP", {
+    timeZone: "Asia/Tokyo",
     month: "short",
     day: "numeric",
     hour: "2-digit",

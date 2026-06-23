@@ -82,6 +82,7 @@ function formatItemDate(iso: string): string {
   if (diffDays < 7) return `${diffDays}日前`;
 
   return d.toLocaleDateString("ja-JP", {
+    timeZone: "Asia/Tokyo",
     month: "short",
     day: "numeric",
   });

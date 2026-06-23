@@ -68,6 +68,7 @@ export function filterPlans(plans: PlanInfo[], query: string): PlanInfo[] {
 export function formatDate(iso: string): string {
   const d = new Date(iso);
   return d.toLocaleDateString("ja-JP", {
+    timeZone: "Asia/Tokyo",
     year: "numeric",
     month: "long",
     day: "numeric",
