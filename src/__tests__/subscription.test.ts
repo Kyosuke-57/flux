@@ -640,7 +640,9 @@ describe("configureRevenueCat", () => {
 
     configureRevenueCat();
 
-    expect(Purchases.configure).toHaveBeenCalledWith({ apiKey: "rc_ios_key" });
+    // NOTE: クラッシュ切り分けのため Purchases.configure() は一時的に無効化。
+    // 原因特定後、production APIキーでの呼び出し or ログイン後の遅延初期化に戻す。
+    expect(Purchases.configure).not.toHaveBeenCalled();
   });
 
   it("Android の API キーがある場合、Purchases.configure を Android のキーで呼ぶ", () => {
@@ -649,9 +651,9 @@ describe("configureRevenueCat", () => {
 
     configureRevenueCat();
 
-    expect(Purchases.configure).toHaveBeenCalledWith({
-      apiKey: "rc_android_key",
-    });
+    // NOTE: クラッシュ切り分けのため Purchases.configure() は一時的に無効化。
+    // 原因特定後、production APIキーでの呼び出し or ログイン後の遅延初期化に戻す。
+    expect(Purchases.configure).not.toHaveBeenCalled();
   });
 });
 

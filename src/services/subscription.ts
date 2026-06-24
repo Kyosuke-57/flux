@@ -228,7 +228,12 @@ export function configureRevenueCat() {
     return;
   }
 
-  Purchases.configure({ apiKey });
+  // TODO: クラッシュ切り分け用 — Test Storeキー対策。
+  // Preview build (developmentClient=false) では Purchases.configure() を呼ぶと
+  // SDKがクラッシュすることがあるため一時的にコメントアウト。
+  // 原因特定後、production APIキーでの呼び出し or ログイン後の遅延初期化に戻す。
+  // Purchases.configure({ apiKey });
+  console.warn("[DEBUG] configureRevenueCat: Purchases.configure disabled for crash isolation");
 }
 
 /**
