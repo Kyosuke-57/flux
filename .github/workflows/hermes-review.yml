@@ -1,0 +1,298 @@
+name: Hermes PR Review (Codex → Lockman → Slack)
+
+# PR 作成/更新をトリガーに Codex レビュー結果と CI 結果を収集し、
+# opencode-go (minimax-m3) で分析したアクションプランを Slack に配信する。
+#
+# 必要なシークレット（リポの Settings > Secrets and variables > Actions）:
+#   - OPENCODE_GO_API_KEY: opencode-go API キー
+#   - SLACK_BOT_TOKEN:     Slack Bot User OAuth Token (chat:write スコープ)
+#
+# 配信先: Slack チャンネル C0B8DK4KKL6 (FLUX 開発室)
+#
+# FLUX (meeting-minutes-app) は monorepo (Expo SDK 56 + React Native + apps/flux-api/ (Next.js 16))。
+# mama_care_app のパターンを踏襲し、TypeScript 検証 (`npx tsc --noEmit`) で
+# コード品質チェックを代用している (FLUX には `npm run lint` スクリプトがない)。
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review]
+
+# Dependabot などからの PR で誤動作しないよう、最小限の権限のみ付与
+permissions:
+  contents: read
+  pull-requests: read
+  checks: read
+  issues: read
+
+# 同じ PR の連続 push による重複実行を抑止
+concurrency:
+  group: hermes-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: Codex レビューをロックマン分析して Slack 配信
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      PR_URL: ${{ github.event.pull_request.html_url }}
+      REPO_FULL: ${{ github.repository }}
+      OWNER: ${{ github.repository_owner }}
+      REPO_NAME: ${{ github.event.repository.name }}
+      SLACK_CHANNEL: C0B8DK4KKL6
+
+    steps:
+      # ------------------------------------------------------------
+      # 1. 環境セットアップ
+      # ------------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install opencode CLI
+        # opencode-ai (npm) をグローバルにインストール
+        # meeting-minutes-app 内の AGENTS.md 準拠: `opencode run --dangerously-skip-permissions` を使用
+        run: |
+          npm install -g opencode-ai@latest
+          opencode --version
+
+      # ------------------------------------------------------------
+      # 2. データ収集
+      # ------------------------------------------------------------
+      - name: Collect PR metadata
+        id: meta
+        run: |
+          set -euo pipefail
+          gh pr view "$PR_NUMBER" \
+            --json title,body,author,additions,deletions,changedFiles,baseRefName,headRefName \
+            > pr-meta.json
+          echo "PR title: $(jq -r .title pr-meta.json)"
+          echo "Changed files: $(jq -r .changedFiles pr-meta.json)"
+
+      - name: Collect changed files
+        run: |
+          gh pr diff "$PR_NUMBER" --name-only > changed-files.txt
+          echo "Changed files:"
+          cat changed-files.txt
+
+      - name: Collect Codex inline comments
+        if: always()
+        run: |
+          set -euo pipefail
+          gh api "repos/${REPO_FULL}/pulls/${PR_NUMBER}/comments" \
+            | jq '[.[] | select(.user.login == "chatgpt-codex-connector")
+                  | {id, path, line, body, created_at}]' \
+            > codex-comments.json
+          CODEX_COUNT=$(jq 'length' codex-comments.json)
+          echo "Codex inline comments: ${CODEX_COUNT} 件"
+
+      - name: Collect PR conversation comments
+        if: always()
+        run: |
+          set -euo pipefail
+          gh api "repos/${REPO_FULL}/issues/${PR_NUMBER}/comments" \
+            > pr-conversation.json
+          CONV_COUNT=$(jq 'length' pr-conversation.json)
+          echo "Conversation comments: ${CONV_COUNT} 件"
+
+      - name: Collect CI check status
+        if: always()
+        run: |
+          set -euo pipefail
+          gh pr checks "$PR_NUMBER" --json name,state,conclusion,detailsUrl,bucket \
+            > ci-checks.json
+          FAIL_COUNT=$(jq '[.[] | select(.conclusion == "failure" or .conclusion == "timed_out")] | length' ci-checks.json)
+          echo "Failed checks: ${FAIL_COUNT} 件"
+          if [ "$FAIL_COUNT" -gt 0 ]; then
+            jq -r '.[] | select(.conclusion == "failure" or .conclusion == "timed_out") | "  - \(.name): \(.conclusion)"' ci-checks.json
+          fi
+
+      - name: Install npm dependencies (for typecheck)
+        if: always()
+        run: |
+          # monorepo (Expo + apps/flux-api)。AGENTS.md 記載通り --legacy-peer-deps 必須
+          npm ci --legacy-peer-deps --no-audit --no-fund 2>&1 | tail -10
+          (cd apps/flux-api && npm ci --legacy-peer-deps --no-audit --no-fund) 2>&1 | tail -10
+
+      - name: Collect TypeScript check output
+        if: always()
+        run: |
+          set +e
+          # FLUX には `npm run lint` がないため、TypeScript 検証 (`npx tsc --noEmit`) で代用
+          # monorepo 全体 (ルート + apps/flux-api) の型チェックを実施
+          npx tsc --noEmit 2>&1 | tee tsc-output-root.txt
+          TSC_ROOT_EXIT=${PIPESTATUS[0]}
+          (cd apps/flux-api && npx tsc --noEmit 2>&1 | tee tsc-output-api.txt)
+          TSC_API_EXIT=${PIPESTATUS[0]}
+          cat tsc-output-root.txt tsc-output-api.txt > tsc-output.txt
+          echo "TypeScript root exit code: ${TSC_ROOT_EXIT}"
+          echo "TypeScript flux-api exit code: ${TSC_API_EXIT}"
+          exit 0  # typecheck 失敗でもこのステップは成功扱い（分析対象として残す）
+
+      # ------------------------------------------------------------
+      # 3. ロックマン分析（opencode-go minimax-m3）
+      # ------------------------------------------------------------
+      - name: Build analysis prompt
+        if: always()
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import pathlib
+          template = pathlib.Path(".github/workflows/hermes-review-prompt.md").read_text(encoding="utf-8")
+
+          def load(p):
+              return pathlib.Path(p).read_text(encoding="utf-8") if pathlib.Path(p).exists() else ""
+
+          prompt = (template
+                    .replace("{{PR_META}}",         load("pr-meta.json"))
+                    .replace("{{CHANGED_FILES}}",   load("changed-files.txt"))
+                    .replace("{{CODEX_COMMENTS}}",  load("codex-comments.json"))
+                    .replace("{{PR_CONVERSATION}}", load("pr-conversation.json"))
+                    .replace("{{CI_CHECKS}}",       load("ci-checks.json"))
+                    .replace("{{TS_OUTPUT}}",       load("tsc-output.txt")))
+          pathlib.Path("/tmp/hermes-prompt.md").write_text(prompt, encoding="utf-8")
+          print(f"Prompt built: {len(prompt)} chars")
+          PY
+
+      - name: Run Lockman analysis via opencode-go
+        if: always()
+        id: analyze
+        env:
+          OPENCODE_GO_API_KEY: ${{ secrets.OPENCODE_GO_API_KEY }}
+        run: |
+          set -euo pipefail
+          # opencode run のプロンプト渡し方:
+          #   - 位置引数: opencode run "プロンプト"
+          #   - stdin パイプ: cat prompt.md | opencode run
+          #   - -f <file>: ファイルを「コンテキスト添付」する（プロンプトファイル指定ではない）
+          # プロンプトは長文なので stdin パイプで渡す。-q でスピナー非表示。
+          cat /tmp/hermes-prompt.md | opencode run \
+            --dangerously-skip-permissions \
+            -m opencode-go/minimax-m3 \
+            -q \
+            > analysis.md 2> analysis.err
+          echo "---- analysis.md ----"
+          cat analysis.md
+          echo "---- stderr (if any) ----"
+          cat analysis.err || true
+
+      # ------------------------------------------------------------
+      # 4. Slack 投稿
+      # ------------------------------------------------------------
+      - name: Post action plan to Slack
+        if: always() && steps.analyze.outcome == 'success'
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+        run: |
+          set -euo pipefail
+          PR_TITLE_VAL=$(jq -r '.title // "N/A"' pr-meta.json)
+          ADD=$(jq -r '.additions // 0' pr-meta.json)
+          DEL=$(jq -r '.deletions // 0' pr-meta.json)
+          FILES=$(jq -r '.changedFiles // 0' pr-meta.json)
+          CODEX_CNT=$(jq 'length // 0' codex-comments.json)
+          CI_SUMMARY=$(jq -r '
+            if length == 0 then "チェックなし"
+            else
+              ([.[] | select(.conclusion == "failure" or .conclusion == "timed_out")] | length) as $f
+              |
+              if $f > 0 then "\($f) 件 FAILURE"
+              else "全 SUCCESS (\(length) 件)"
+              end
+            end
+          ' ci-checks.json)
+
+          python3 - <<'PY'
+          import json, os, urllib.request
+
+          channel  = os.environ.get("SLACK_CHANNEL", "C0B8DK4KKL6")
+          token    = os.environ["SLACK_BOT_TOKEN"]
+          pr_url   = os.environ["PR_URL"]
+          pr_num   = os.environ["PR_NUMBER"]
+          repo     = os.environ["REPO_FULL"]
+
+          # bash から渡された値（環境変数経由ではなくファイル経由）
+          title    = os.popen('jq -r \'.title // "N/A"\' pr-meta.json').read().strip()
+          add_n    = os.popen('jq -r \'.additions // 0\' pr-meta.json').read().strip()
+          del_n    = os.popen('jq -r \'.deletions // 0\' pr-meta.json').read().strip()
+          files_n  = os.popen('jq -r \'.changedFiles // 0\' pr-meta.json').read().strip()
+          codex_n  = os.popen('jq \'length // 0\' codex-comments.json').read().strip()
+          ci_sum   = os.popen("""jq -r 'if length == 0 then "チェックなし" else ([.[] | select(.conclusion == "failure" or .conclusion == "timed_out")] | length) as $f | if $f > 0 then "FAILURE " + ($f|tostring) + " 件" else "全 SUCCESS (" + (length|tostring) + " 件)" end end' ci-checks.json""").read().strip()
+          analysis = open("analysis.md", encoding="utf-8").read()
+
+          # Slack の text は 40k 文字制限に収める（超過時は末尾を省略）
+          max_len = 38000
+          if len(analysis) > max_len:
+              analysis = analysis[:max_len] + "\n\n…(省略) 詳細は PR 参照"
+
+          header = (
+              ":mag: *PR #" + pr_num + " アクションプラン*\n"
+              "_リポ_: `" + repo + "`\n"
+              "_タイトル_: " + title + "\n"
+              "_変更規模_: " + files_n + " files (+" + add_n + " / -" + del_n + ")\n"
+              "_Codex 指摘_: " + codex_n + "件\n"
+              "_CI_: " + ci_sum + "\n"
+              "_URL_: <" + pr_url + "|PR を開く>\n"
+              "━━━━━━━━━━━━━━━━━━━━"
+          )
+
+          payload = {
+              "channel": channel,
+              "mrkdwn":  True,
+              "text":    header + "\n\n" + analysis,
+          }
+
+          req = urllib.request.Request(
+              "https://slack.com/api/chat.postMessage",
+              data=json.dumps(payload).encode("utf-8"),
+              headers={
+                  "Content-Type": "application/json; charset=utf-8",
+                  "Authorization": "Bearer " + token,
+              },
+              method="POST",
+          )
+          with urllib.request.urlopen(req, timeout=30) as resp:
+              body = json.loads(resp.read().decode("utf-8"))
+          print("Slack response:", json.dumps(body, ensure_ascii=False))
+          if not body.get("ok"):
+              raise SystemExit("Slack API error: " + str(body.get("error")))
+          PY
+
+      # ------------------------------------------------------------
+      # 5. 失敗時のフォールバック Slack 通知
+      # ------------------------------------------------------------
+      - name: Notify Slack on failure
+        if: failure()
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import json, os, urllib.request
+          payload = {
+              "channel": os.environ.get("SLACK_CHANNEL", "C0B8DK4KKL6"),
+              "text": (
+                  ":warning: ロックマン分析ワークフローが失敗しました。\n"
+                  "PR: " + os.environ.get("PR_URL", "(unknown)") + "\n"
+                  "GitHub Actions のログを確認してください。"
+              ),
+          }
+          req = urllib.request.Request(
+              "https://slack.com/api/chat.postMessage",
+              data=json.dumps(payload).encode("utf-8"),
+              headers={
+                  "Content-Type": "application/json; charset=utf-8",
+                  "Authorization": "Bearer " + os.environ["SLACK_BOT_TOKEN"],
+              },
+              method="POST",
+          )
+          with urllib.request.urlopen(req, timeout=30) as resp:
+              print("Fallback Slack response:", resp.read().decode("utf-8"))
+          PY
