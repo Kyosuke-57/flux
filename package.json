@@ -37,7 +37,7 @@
     "@testing-library/react-native": "^14.0.0",
     "@types/react": "~19.2.14",
     "@types/react-test-renderer": "^19.1.0",
-    "@vitejs/plugin-react": "^6.0.2",
+    "@vitejs/plugin-react": "^6.0.3",
     "husky": "^9.1.7",
     "lint-staged": "^16.4.0",
     "react-test-renderer": "^19.2.7",
