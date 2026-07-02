@@ -154,7 +154,7 @@ function buildRecordingActivities(
     timestamp: r.created_at,
     status: r.transcribed ? "transcribed" : "pending",
     targetId: r.id,
-    targetRoute: `/recording/${r.id}`,
+    targetRoute: `/(tabs)/recordings`,
   }));
 }
 

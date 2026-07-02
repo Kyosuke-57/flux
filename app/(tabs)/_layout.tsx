@@ -126,6 +126,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="recordings"
+        options={{
+          title: "録音一覧",
+          tabBarIcon: ({ focused }) => <TabIcon icon="list" focused={focused} c={c} />,
+        }}
+      />
+      <Tabs.Screen
         name="history"
         options={{
           title: "履歴",
