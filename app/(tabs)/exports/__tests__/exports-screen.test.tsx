@@ -158,3 +158,62 @@ describe("フォーマット表示", () => {
     });
   });
 });
+
+// ─── 検索フィルタロジック（useExportsData より抽出） ─────────
+
+/**
+ * useExportsData 内の filteredExports 計算ロジックから
+ * 検索フィルタ部分のみを取り出した純粋関数。
+ * タイトルとフォーマットの両方に部分一致で検索する。
+ */
+function searchFilter(items: ExportItem[], search: string): ExportItem[] {
+  if (!search.trim()) return items;
+  const q = search.toLowerCase();
+  return items.filter(
+    (e) =>
+      e.title.toLowerCase().includes(q) ||
+      e.format.toLowerCase().includes(q),
+  );
+}
+
+// ─── 検索バー動作テスト ───────────────────────────────────────
+
+describe("エクスポート検索バー", () => {
+  it("検索バーが空文字の時は全件表示される", () => {
+    const result = searchFilter(sampleExports, "");
+    expect(result).toHaveLength(3);
+  });
+
+  it("部分一致するテキストで検索するとフィルタされる", () => {
+    const result = searchFilter(sampleExports, "週次");
+    expect(result).toHaveLength(1);
+    expect(result[0].title).toBe("週次ミーティング 2026-06-08");
+  });
+
+  it("検索クリアボタンで空文字にすると全件に戻る", () => {
+    // 検索語を入力 → 絞り込まれる
+    const filtered = searchFilter(sampleExports, "週次");
+    expect(filtered).toHaveLength(1);
+
+    // 検索をクリア（空文字に）→ 全件に戻る
+    const cleared = searchFilter(sampleExports, "");
+    expect(cleared).toHaveLength(3);
+  });
+
+  it("フォーマットの部分一致でもフィルタされる", () => {
+    const result = searchFilter(sampleExports, "pdf");
+    expect(result).toHaveLength(1);
+    expect(result[0].format).toBe("pdf");
+  });
+
+  it("大文字小文字を区別しない", () => {
+    const result = searchFilter(sampleExports, "PDF");
+    expect(result).toHaveLength(1);
+    expect(result[0].format).toBe("pdf");
+  });
+
+  it("該当なしの場合は空配列を返す", () => {
+    const result = searchFilter(sampleExports, "存在しない");
+    expect(result).toHaveLength(0);
+  });
+});
