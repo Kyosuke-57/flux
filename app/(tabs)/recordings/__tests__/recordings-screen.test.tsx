@@ -10,6 +10,9 @@ import {
   getDurationLabel,
   getTranscribedLabel,
   sortRecordings,
+  formatDuration,
+  formatFileSize,
+  filterRecordings,
 } from "../hooks/utils";
 import type { Recording } from "../../../../src/types";
 
@@ -173,5 +176,108 @@ describe("sortRecordings", () => {
     const original = [...items];
     sortRecordings(items, "date", "asc");
     expect(items).toEqual(original);
+  });
+});
+
+// ─── formatDuration ─────────────────────────────────────────
+
+describe("formatDuration", () => {
+  it("0秒は 00:00 を返す", () => {
+    expect(formatDuration(0)).toBe("00:00");
+  });
+
+  it("30秒は 00:30 を返す", () => {
+    expect(formatDuration(30)).toBe("00:30");
+  });
+
+  it("90秒は 01:30 を返す", () => {
+    expect(formatDuration(90)).toBe("01:30");
+  });
+
+  it("3600秒は 60:00 を返す", () => {
+    expect(formatDuration(3600)).toBe("60:00");
+  });
+
+  it("秒数を丸める（小数切り捨て）", () => {
+    expect(formatDuration(65.7)).toBe("01:05");
+  });
+});
+
+// ─── formatFileSize ─────────────────────────────────────────
+
+describe("formatFileSize", () => {
+  it("1024未満はB表記", () => {
+    expect(formatFileSize(500)).toBe("500B");
+  });
+
+  it("1024以上はKB表記", () => {
+    expect(formatFileSize(2048)).toBe("2.0KB");
+  });
+
+  it("1MB以上はMB表記", () => {
+    expect(formatFileSize(2 * 1024 * 1024)).toBe("2.0MB");
+  });
+});
+
+// ─── filterRecordings ────────────────────────────────────────
+
+const sampleRecordings: Recording[] = [
+  makeMockRecording({
+    id: "1",
+    title: "定例MTG 2026年6月",
+    file_path: "recordings/june-meeting.m4a",
+    duration_seconds: 1800,
+    created_at: "2026-06-12T10:00:00Z",
+    transcribed: true,
+  }),
+  makeMockRecording({
+    id: "2",
+    title: "打ち合わせ A",
+    file_path: "recordings/meeting-a.m4a",
+    duration_seconds: 900,
+    created_at: "2026-06-11T14:00:00Z",
+    transcribed: false,
+  }),
+  makeMockRecording({
+    id: "3",
+    title: "週次レビュー",
+    file_path: "recordings/weekly-review.m4a",
+    duration_seconds: 3600,
+    created_at: "2026-06-10T09:00:00Z",
+    transcribed: true,
+  }),
+];
+
+describe("filterRecordings", () => {
+  it("空クエリは全件返す", () => {
+    expect(filterRecordings(sampleRecordings, "")).toHaveLength(3);
+    expect(filterRecordings(sampleRecordings, "   ")).toHaveLength(3);
+  });
+
+  it("title で部分一致フィルタ", () => {
+    const result = filterRecordings(sampleRecordings, "MTG");
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("1");
+  });
+
+  it("file_path で部分一致フィルタ", () => {
+    const result = filterRecordings(sampleRecordings, "weekly");
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("3");
+  });
+
+  it("大文字小文字を区別しない", () => {
+    const result = filterRecordings(sampleRecordings, "mtg");
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("1");
+  });
+
+  it("一致しないクエリは空配列", () => {
+    const result = filterRecordings(sampleRecordings, "存在しない");
+    expect(result).toHaveLength(0);
+  });
+
+  it("空配列に対しては空配列を返す", () => {
+    expect(filterRecordings([], "test")).toHaveLength(0);
   });
 });

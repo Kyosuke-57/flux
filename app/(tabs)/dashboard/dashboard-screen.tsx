@@ -417,7 +417,7 @@ export default function DashboardScreen() {
               if (type === "minute") {
                 router.push(`/minute/${id}`);
               } else if (type === "recording") {
-                router.push(`/recording/${id}`);
+                router.push(`/recordings`);
               }
             }}
           />

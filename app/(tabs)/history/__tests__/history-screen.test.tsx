@@ -77,7 +77,7 @@ const d = (ms: number) => new Date(NOW.getTime() + ms).toISOString();
 
 const activities = [
   { id: "a1", type: "minute_created", title: "月次MTG", description: "d", timestamp: d(-3600000), targetId: "m1", targetRoute: "/minute/m1" },
-  { id: "a2", type: "recording_uploaded", title: "録音_001", description: "d", timestamp: d(-86400000), targetId: "r1", targetRoute: "/recording/r1", status: "transcribed" },
+  { id: "a2", type: "recording_uploaded", title: "録音_001", description: "d", timestamp: d(-86400000), targetId: "r1", targetRoute: "/(tabs)/recordings", status: "transcribed" },
   { id: "a3", type: "transcription_job", title: "audio.mp3", description: "d", timestamp: d(-172800000), targetId: "j1", targetRoute: "/(tabs)/transcription-jobs", status: "completed" },
   { id: "a4", type: "exported", title: "エクスポート", description: "d", timestamp: d(-604800000), targetId: "e1", targetRoute: "/(tabs)/exports" },
 ];
